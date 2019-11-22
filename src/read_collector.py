@@ -22,6 +22,19 @@ def estimate_discordant_insert_len(bamfile):
     stdev = np.std(insert_sizes)
     return frag_len+(stdev*STDEV_COUNT)
 
+def goodread(read):
+    if (read.is_qcfail
+            or read.is_unmapped
+            or read.is_duplicate
+            or int(read.mapping_quality) < MIN_MAPQ
+            or read.is_secondary
+            or read.is_supplementary
+            or read.mate_is_unmapped
+            or (read.next_reference_id != read.reference_id)
+    ):
+        return False
+    return True
+
 
 def collect_reads_sv(bam_name, region, discordant_len=None):
     """
@@ -41,27 +54,19 @@ def collect_reads_sv(bam_name, region, discordant_len=None):
             int(position)-discordant_len, 
             int(position)+discordant_len
         )
+        readcount = 0
         for read in bam_iter:
-            if (read.is_qcfail
-                or read.is_unmapped
-                or read.is_duplicate
-                or int(read.mapping_quality) < MIN_MAPQ
-                or read.is_secondary
-                or read.is_supplementary
-            ):
+            if not goodread(read):
                 continue
-            elif read.has_tag("SA") or read.tlen > discordant_len:
+            if (read.has_tag("SA") or read.tlen > discordant_len):
                 #keep if splitter or discordant
                 supporting_reads.append(read)
+
                 #find mate for informative site check
-                if not read.mate_is_unmapped:
-                    mate = bamfile.mate(read)
-                    if not (read.is_duplicate
-                        or int(read.mapping_quality) < MIN_MAPQ
-                        or read.is_secondary
-                        or read.is_supplementary
-                    ):
-                        supporting_reads.append(mate)
+                mate = bamfile.mate(read)
+
+                if goodread(mate):
+                    supporting_reads.append(mate)
 
     return {
         "alt" : supporting_reads,
