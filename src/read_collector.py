@@ -35,25 +35,33 @@ def collect_reads_sv(bam_name, region, discordant_len=None):
         discordant_len = estimate_discordant_insert_len(bamfile)
 
     supporting_reads = []
-    bam_iter = bamfile.fetch(
-        region['chrom'], 
-        region['start']-discordant_len, 
-        region['end']+discordant_len
-    )
-    for read in bam_iter:
-        if (read.is_qcfail
-            or read.is_unmapped
-            or read.is_duplicate
-            or int(read.mapping_quality) < MIN_MAPQ
-            or read.is_secondary
-            or read.is_supplementary
-        ):
-            continue
-        elif read.has_tag("SA") or read.tlen > discordant_len:
-            #keep if splitter or discordant
-            supporting_reads.append(read)
-            #find mate for informative site check
-            supporting_reads.append(bamfile.mate(read))
+    for position in region['start'],region['end']:
+        bam_iter = bamfile.fetch(
+            region['chrom'], 
+            int(position)-discordant_len, 
+            int(position)+discordant_len
+        )
+        for read in bam_iter:
+            if (read.is_qcfail
+                or read.is_unmapped
+                or read.is_duplicate
+                or int(read.mapping_quality) < MIN_MAPQ
+                or read.is_secondary
+                or read.is_supplementary
+            ):
+                continue
+            elif read.has_tag("SA") or read.tlen > discordant_len:
+                #keep if splitter or discordant
+                supporting_reads.append(read)
+                #find mate for informative site check
+                if not read.mate_is_unmapped:
+                    mate = bamfile.mate(read)
+                    if not (read.is_duplicate
+                        or int(read.mapping_quality) < MIN_MAPQ
+                        or read.is_secondary
+                        or read.is_supplementary
+                    ):
+                        supporting_reads.append(mate)
 
     return {
         "alt" : supporting_reads,

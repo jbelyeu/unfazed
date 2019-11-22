@@ -4,25 +4,62 @@ from __future__ import print_function
 import sys
 import argparse
 import read_collector
-import site_search
+import site_searcher
+import informative_site_finder
+
 MILLION=1000000
 MIN_MAPQ=1
 STDEV_COUNT=3
 
 def setup_args():
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("-b", "--bam", help="BAM/CRAM for kid", default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/crams/1016.cram")
-    parser.add_argument("-c", "--chrom", help="regions of DNM SV", default="12", type=str)
-    parser.add_argument("-s", "--start", help="regions of DNM SV", default=103653684, type=int)
-    parser.add_argument("-e", "--end", help="regions of DNM SV", default=103655220, type=int)
+    parser.add_argument(
+        "-d", 
+        "--dnms", 
+        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location",
+        default="dnms.bed")
+
+    parser.add_argument(
+        "-v", 
+        "--vcf", 
+        help="vcf file of SNVs to identify informative sites. Must contain each kid and both parents",
+        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph.bcf")
+
+    parser.add_argument(
+        "-p", 
+        "--ped", 
+        help="ped file including the kid and both parent IDs", 
+        type=str, 
+        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
 
     return parser.parse_args()
 
+def parse_ped(ped, kids):
+    labels = ["kid","dad", "mom","sex"]
+    kid_entries = {}
+    with open(ped, 'r') as pedfile:
+        for line in pedfile:
+            fields = line.strip().split()
+            if fields[1] in kids:
+                kid_entries[fields[1]] = dict(zip(labels,fields[1:5]))
+    return kid_entries
+
+def parse_bed(bed):
+    labels = ["chrom","start", "end","kid", "bam"]
+    kids = []
+    dnms = []
+    with open(bed, 'r') as bedfile:
+        for line in bedfile:
+            #print(line.strip().split())
+            if line[0] == '#': continue
+            #TODO add formatting checks to make sure all the necessary fields are present
+            dnms.append(dict(zip(labels,line.strip().split()[:5])))
+            kids.append(dnms[-1]['kid'])
+    return dnms, kids
+
+
 def phase(matches):
-    parent_of_origin_evidence_counts = {
-        'dad': 0,
-        'mom': 0
-    }
+    origin_parent_data = {}
 
     for ref_alt in matches:
         for match in matches[ref_alt]:
@@ -33,39 +70,71 @@ def phase(matches):
                 continue
             kid_allele = read.query_sequence[read_pos]
 
-            #if the kid base is ref, this read comes from whichever parent has two refs
-            #if the kid base is alt, this read comes from whichever parent has two refs
-            kid_allele_isref = (kid_allele == match['ref_informative'])
-            if (match['dad'].count(kid_allele_isref) == 2):
-                parent_of_origin_evidence_counts["dad"] += 1
+            #if the kid base is ref, this read comes from ref_parent
+            #if the kid base is alt, this read comes from alt_parent
+            if (kid_allele == match['ref_allele']):
+                if match['ref_parent'] not in origin_parent_data:
+                    origin_parent_data[match['ref_parent']] = []
+                origin_parent_data[match['ref_parent']].append([read, match['pos']])
+
+            elif (kid_allele == match['alt_allele']):
+                if match['alt_parent'] not in origin_parent_data:
+                    origin_parent_data[match['alt_parent']] = []
+                origin_parent_data[match['alt_parent']].append([read, match['pos']])
             else:
-                parent_of_origin_evidence_counts["mom"] += 1
-    return parent_of_origin_evidence_counts
+                print("unknown allele for informative site")
+    return origin_parent_data
+
+
 
 def main(args):
-    region = {
-        'chrom' : args.chrom,
-        'start' : args.start,
-        'end' : args.end,
-    }
-    reads = read_collector.collect_reads_sv(args.bam, region)
+    dnms,kids = parse_bed(args.dnms)
+    pedigrees = parse_ped(args.ped, kids)
 
-    informative_sites = {
-        "1": [],
-        "12": [{
-            'pos':103653435, 
-            'ref_informative': 'A',
-            'alt_informative': 'C',
-            'kid':[True, False],
-            'dad':[True,False], 
-            'mom':[True,True]
-        }]
-    }
-    #matches contain all the informative sites that are overlapped by reads, split into ref/alt
-    matches = site_search.match_informative_sites(reads, informative_sites, region['chrom'])
-    counts = phase(matches)
-    print(counts)
+    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, args.vcf, 10000)
+    
+    header = ["chrom", "start","end","kid","dad_id","dad_informative_sites","dad_reads","mom_id","mom_informative_sites","mom_reads"]
+    print("#"+"\t".join(header))
+    for denovo in dnms_with_informative_sites:
+        informative_sites = denovo['candidate_sites']
 
+        region = {
+            "chrom" : denovo['chrom'],
+            "start" : denovo['start'],
+            "end" : denovo['end'],
+        }
+
+        if len(informative_sites) <= 0:
+            print("No usable informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+            continue
+
+        #these are reads that support the ref or alt allele of the de novo variant
+        dnm_reads = read_collector.collect_reads_sv(denovo['bam'], region)
+        matches = site_searcher.match_informative_sites(dnm_reads, informative_sites)
+
+        if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
+            print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+            continue
+
+        counts = phase(matches)
+        dad_id = pedigrees[denovo['kid']]['dad']
+        mom_id = pedigrees[denovo['kid']]['mom']
+
+        dad_informative_sites = ",".join(list(set([ str(c[1]) for c in counts[dad_id]]))) if dad_id in counts else "NA"
+        dad_reads = ",".join(list(set([c[0].query_name for c in counts[dad_id]]))) if dad_id in counts else "NA"
+        mom_informative_sites = ",".join(list(set([ str(c[1]) for c in counts[mom_id]]))) if mom_id in counts else "NA"
+        mom_reads = ",".join(list(set([c[0].query_name for c in counts[mom_id]]))) if mom_id in counts else "NA"
+
+        record = list(region.values()) + [
+            denovo['kid'], 
+            dad_id,
+            dad_informative_sites,
+            dad_reads,
+            mom_id,
+            mom_informative_sites,
+            mom_reads
+        ]
+        print("\t".join(record))
 
 
 if __name__ == "__main__":
