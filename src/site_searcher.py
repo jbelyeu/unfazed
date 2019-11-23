@@ -4,13 +4,13 @@ from __future__ import print_function
 import sys
 
 def binary_search(start, end, informative_sites):
-    match = None
+    matches = []
     query_start = 0
     query_end = len(informative_sites)
     query_start_prev = -1
     query_end_prev = -1
 
-    while (not match and query_end > 0):
+    while (len(matches) <= 0 and query_end > 0):
 
         #if the query region converges, no sites in read
         if (query_start == query_end):
@@ -23,10 +23,24 @@ def binary_search(start, end, informative_sites):
         query_start_prev = query_start
         query_end_prev = query_end
         query_pos = int((query_end+query_start)/2)
-
+        
         #if the query position is between the start and the end of the read, we've arrived
-        if start <= informative_sites[query_pos]['pos'] <= end:
-            match = informative_sites[query_pos]
+        if start <= informative_sites[query_pos]['pos'] < end:
+            #keep the one that we found
+            matches.append(informative_sites[query_pos])
+
+            #check the next ones to see if they also fit the bill
+            for isite in informative_sites[query_pos+1:]:
+                if (start <= isite['pos'] <= end):
+                    matches.append(isite)
+                else:
+                    break
+            #and the previous ones
+            for isite in informative_sites[:query_pos][::-1]:
+                if (start <= isite['pos'] <= end):
+                    matches.append(isite)
+                else:
+                    break
             break
         elif informative_sites[query_pos]['pos'] > start: 
             #move left, position is too high
@@ -34,7 +48,7 @@ def binary_search(start, end, informative_sites):
         elif informative_sites[query_pos]['pos'] < start: 
             #move right, position is too low
             query_start = query_pos+1
-    return match
+    return matches
 
 
 def match_informative_sites(reads, informative_sites):
@@ -51,14 +65,14 @@ def match_informative_sites(reads, informative_sites):
         matches[ref_alt] = []
 
         for read in reads[ref_alt]:
-            site_match = binary_search(
+            site_matches = binary_search(
                 read.reference_start, 
                 read.reference_end, 
                 informative_sites
             )
-            if site_match:
-                site_match['read'] = read
-                matches[ref_alt].append(site_match)
+            if len(site_matches) > 0:
+                match_info = {"matches":site_matches, 'read':read}
+                matches[ref_alt].append(match_info)
     return matches
 
 if __name__ == "__main__":

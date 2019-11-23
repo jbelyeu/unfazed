@@ -4,12 +4,30 @@ from cyvcf2 import VCF
 import sys
 
 
-def get_position(vcf, denovo, extra):
-    loc = "%s:%d-%d" % (denovo['chrom'], int(denovo['end']) - extra,
-                        int(denovo['end']) + extra)
-    for variant in vcf(loc):
-        yield variant
-
+def get_position(vcf, denovo, extra, whole_region):
+    locs = []
+    loc_template = "{chrom}:{start}-{end}"
+    if whole_region:
+        locs.append(loc_template.format(
+            chrom=denovo['chrom'], 
+            start=(int(denovo['start']) - extra), 
+            end=(int(denovo['end']) + extra)
+        ))
+    else:
+        locs.append(loc_template.format(
+            chrom=denovo['chrom'], 
+            start=(int(denovo['start']) - extra), 
+            end=(int(denovo['start']) + extra)
+        ))
+        locs.append(loc_template.format(
+            chrom=denovo['chrom'], 
+            start=(int(denovo['end']) - extra), 
+            end=(int(denovo['end']) + extra)
+        ))
+    for loc in locs:
+        for variant in vcf(loc):
+            yield variant
+    
 def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals, 
                             min_gq=20, min_depth=10):
     """
@@ -36,11 +54,12 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals,
         return False
     return True
 
-def find(dnms, pedigrees, vcf_name, search_dist):
+def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     """
     Given list of denovo variant positions 
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
+    
     if len(dnms) <= 0:
         return
     
@@ -61,7 +80,7 @@ def find(dnms, pedigrees, vcf_name, search_dist):
         candidate_sites = [] 
 
         # loop over all variants in the VCF within search_dist bases from the DNM
-        for variant in get_position(vcf, denovo, extra=search_dist):
+        for variant in get_position(vcf, denovo, search_dist, whole_region):
             # ignore more complex variants for now
             if ((len(variant.REF) > 1) or 
                         (len(variant.ALT) > 1) or 
@@ -101,8 +120,7 @@ def find(dnms, pedigrees, vcf_name, search_dist):
                 candidate['alt_parent'] = pedigrees[denovo['kid']]['mom']
                 candidate['ref_parent'] = pedigrees[denovo['kid']]['dad']
                 candidate_sites.append(candidate)
-
-        denovo['candidate_sites'] = candidate_sites
+        denovo['candidate_sites'] = sorted(candidate_sites, key=lambda x: x['pos'])
         dnms[i] = denovo
     return dnms
 

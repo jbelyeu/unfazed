@@ -49,17 +49,30 @@ def collect_reads_sv(bam_name, region, discordant_len=None):
 
     supporting_reads = []
     for position in region['start'],region['end']:
+        position = int(position)
         bam_iter = bamfile.fetch(
             region['chrom'], 
-            int(position)-discordant_len, 
-            int(position)+discordant_len
+            position-discordant_len, 
+            position+discordant_len
         )
         readcount = 0
         for read in bam_iter:
             if not goodread(read):
                 continue
-            if (read.has_tag("SA") or read.tlen > discordant_len):
-                #keep if splitter or discordant
+            if (read.has_tag("SA")):
+                #if it's a splitter and the softclipping begins within 5 bases of the breaks, keep it
+                if (((position == int(region['start'])) and ((position-5) <= read.get_reference_positions()[-1] <= (position+5))) 
+                      or ((position == int(region['end'])) and ((position-5) <= read.get_reference_positions()[0] <= (position+5)))):
+                    supporting_reads.append(read)
+
+                    #find mate for informative site check
+                    mate = bamfile.mate(read)
+
+                    if goodread(mate):
+                        supporting_reads.append(mate)
+    
+            elif read.tlen > discordant_len:
+                #if it's discordant and the abs(tlen) is within 70% of the length of the variant, keep it
                 supporting_reads.append(read)
 
                 #find mate for informative site check
@@ -67,7 +80,6 @@ def collect_reads_sv(bam_name, region, discordant_len=None):
 
                 if goodread(mate):
                     supporting_reads.append(mate)
-
     return {
         "alt" : supporting_reads,
         "ref" : []
