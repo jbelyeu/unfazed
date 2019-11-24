@@ -3,6 +3,9 @@ from __future__ import print_function
 from cyvcf2 import VCF
 import sys
 
+HOM_ALT= 3
+HET = 1
+HOM_REF = 0
 
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
@@ -39,20 +42,62 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals,
     genotypes: numpy array of genotypes
     gt_quals: numpy array of genotype qualities
     """
-    HOM_ALT, HET = 3, 1
-    if genotypes[i] == HOM_ALT:
+    if genotypes[i] == HOM_REF:
+        min_ab, max_ab = 0.0, 0.2
+    elif genotypes[i] == HOM_ALT:
         min_ab, max_ab = 0.8, 1.
     elif genotypes[i] == HET:
         min_ab, max_ab = 0.2, 0.8
     if gt_quals[i] < min_gq: 
         return False
-    if ref_depths[i] + alt_depths[i] < min_depth:
+    if (ref_depths[i] + alt_depths[i]) < min_depth:
         return False
-    if alt_depths[i] / float(ref_depths[i] + alt_depths[i]) < min_ab: 
+
+    allele_bal = float(alt_depths[i] / float(ref_depths[i] + alt_depths[i]))
+    if allele_bal < min_ab: 
         return False
-    if alt_depths[i] / float(ref_depths[i] + alt_depths[i]) > max_ab: 
+    if allele_bal > max_ab: 
         return False
     return True
+
+
+def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
+    kid_allele = None
+    if ((denovo['svtype'] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4):
+        #large deletions can be gentyped by hemizygous inheritance of informative alleles
+        if (genotypes[kid_idx] == HOM_ALT):
+            kid_allele = 'ref_parent'   
+        elif (genotypes[kid_idx] == HOM_REF):
+            kid_allele = 'alt_parent'
+        else:
+            #het kid, variant unusable
+            return
+    elif ((denovo['svtype'] == "DUP") 
+            and (ref_depths[kid_idx] > 2)
+            and (alt_depths[kid_idx] > 2)
+            and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 10):
+        #large duplications can be gentyped by unbalanced het inheritance of informative alleles
+        #if there's enough depth
+        if (genotypes[kid_idx] == HET):
+            kid_alt_allele_bal = (alt_depths[kid_idx]/float(ref_depths[kid_idx]+alt_depths[kid_idx]))
+            #allele balance should be about 2:1 for the dominant allele
+            if (kid_alt_allele_bal >= .67):
+                #this variant came from the alt parent
+                kid_allele = 'alt_parent'
+            elif (kid_alt_allele_bal <= .33):
+                #this variant came from the ref parent
+                kid_allele = 'ref_parent'
+            else:
+                #balanced allele, variant unusable
+                return
+        else:
+            #homozygous kid, variant unusable
+            return
+    else:
+        #not a CNV, or not enough depth
+        return
+    return kid_allele
+
 
 def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     """
@@ -63,10 +108,14 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     if len(dnms) <= 0:
         return
     
-    HOM_ALT, HET, HOM_REF = 3, 1, 0
     SEX_KEY = {
         'male' : 1,
         'female': 2
+    }
+    #for variant-phasing rather than read-backed, dels require hemizygous and dups require hets
+    SV_INFORMATIVE_KEY = {
+        'DUP' : HET,
+        'DEL' : HOM_ALT
     }
     
 
@@ -78,13 +127,10 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
         mom_idx = sample_dict[pedigrees[denovo['kid']]['mom']]
         
         candidate_sites = [] 
-
         # loop over all variants in the VCF within search_dist bases from the DNM
         for variant in get_position(vcf, denovo, search_dist, whole_region):
             # ignore more complex variants for now
-            if ((len(variant.REF) > 1) or 
-                        (len(variant.ALT) > 1) or 
-                        ('*' in variant.ALT or len(variant.ALT[0]) > 1)): 
+            if ((len(variant.REF) > 1) or (len(variant.ALT) > 1) or ('*' in variant.ALT or len(variant.ALT[0]) > 1)): 
                 continue
 
             #male chrX variants have to come from mom
@@ -92,9 +138,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
                 continue
 
             genotypes = variant.gt_types
-            #if the kid's genotype isn't het it can't be used as an informative site
-            if genotypes[kid_idx] != HET: continue
-
             candidate_parent = 'NA'
             candidate_site = 'NA'
             ref_depths = variant.gt_ref_depths
@@ -106,20 +149,46 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
                 'ref_allele'    : variant.REF,
                 'alt_allele'    : variant.ALT[0],
             }
-            
-            if genotypes[dad_idx] in (HET, HOM_ALT) and genotypes[mom_idx] == HOM_REF:
-                if not is_high_quality_site(dad_idx, ref_depths, alt_depths, genotypes, gt_quals): 
+
+
+            if whole_region and ('svtype' in denovo):
+                candidate['kid_allele'] = get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx)
+                if not candidate['kid_allele']:
                     continue
+            elif genotypes[kid_idx] != HET:
+                continue
+
+            if not (is_high_quality_site(dad_idx, ref_depths, alt_depths, genotypes, gt_quals) and  
+                    is_high_quality_site(mom_idx, ref_depths, alt_depths, genotypes, gt_quals)): 
+                continue
+
+            if genotypes[dad_idx] in (HET, HOM_ALT) and genotypes[mom_idx] == HOM_REF:
                 candidate['alt_parent'] = pedigrees[denovo['kid']]['dad']
                 candidate['ref_parent'] = pedigrees[denovo['kid']]['mom']
-                candidate_sites.append(candidate)
-
             elif genotypes[mom_idx] in (HET, HOM_ALT) and genotypes[dad_idx] == HOM_REF:
-                if not is_high_quality_site(mom_idx, ref_depths, alt_depths, genotypes, gt_quals): 
-                    continue
                 candidate['alt_parent'] = pedigrees[denovo['kid']]['mom']
                 candidate['ref_parent'] = pedigrees[denovo['kid']]['dad']
-                candidate_sites.append(candidate)
+            elif genotypes[mom_idx] == HET and genotypes[dad_idx] == HOM_ALT:
+                candidate['alt_parent'] = pedigrees[denovo['kid']]['dad']
+                candidate['ref_parent'] = pedigrees[denovo['kid']]['mom']
+            elif genotypes[dad_idx] == HET and genotypes[mom_idx] == HOM_ALT:
+                candidate['alt_parent'] = pedigrees[denovo['kid']]['mom']
+                candidate['ref_parent'] = pedigrees[denovo['kid']]['dad']
+            else:
+                continue
+    
+            #if kid is hemizygous we need to make sure the allele is not shared
+            #by both parents
+            if genotypes[kid_idx] in [HOM_ALT, HOM_REF]:
+                unique_allele = True
+                for parent_idx in dad_idx,mom_idx:
+                    parent_gt = genotypes[parent_idx]
+                    kid_gt = genotypes[kid_idx]
+                    if (parent_gt in [HOM_ALT,HOM_REF]) and (genotypes[kid_idx] == parent_gt):
+                        unique_allele=False
+                if not unique_allele:
+                    continue
+            candidate_sites.append(candidate)
         denovo['candidate_sites'] = sorted(candidate_sites, key=lambda x: x['pos'])
         dnms[i] = denovo
     return dnms

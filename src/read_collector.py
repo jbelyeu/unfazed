@@ -72,14 +72,17 @@ def collect_reads_sv(bam_name, region, discordant_len=None):
                         supporting_reads.append(mate)
     
             elif read.tlen > discordant_len:
-                #if it's discordant and the abs(tlen) is within 70% of the length of the variant, keep it
-                supporting_reads.append(read)
-
                 #find mate for informative site check
                 mate = bamfile.mate(read)
-
-                if goodread(mate):
+                read_positions = [
+                    mate.reference_start,
+                    read.reference_start,
+                    mate.reference_end,
+                    read.reference_end
+                ]
+                if (goodread(mate) and min(read_positions) <= int(region['start']) <= max(read_positions)):
                     supporting_reads.append(mate)
+                    supporting_reads.append(read)
     return {
         "alt" : supporting_reads,
         "ref" : []
