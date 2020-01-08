@@ -12,7 +12,6 @@ READLEN=151
 SPLITTER_ERR_MARGIN=5
 EXTENDED_RB_READ_GOAL=100
 
-
 def estimate_discordant_insert_len(bamfile):
     insert_sizes = []
     for i,read in enumerate(bamfile):
@@ -44,12 +43,13 @@ def goodread(read):
 
 def get_allele_at(read, mate, pos):
     read_ref_positions = read.get_reference_positions(full_length=True)
-    mate_ref_positions = mate.get_reference_positions(full_length=True)
-
+    if mate:
+        mate_ref_positions = mate.get_reference_positions(full_length=True)
+    
     if pos in read_ref_positions:
         read_pos = read_ref_positions.index(pos)
         return read.query_sequence[read_pos]
-    elif pos in mate_ref_positions:
+    elif mate and pos in mate_ref_positions:
         mate_pos = mate_ref_positions.index(pos)
         return mate.query_sequence[mate_pos]
     else:
@@ -123,13 +123,15 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
     fetched_reads = {}
     read_sites = {}
     site_reads = {}
-
     for het_site in het_sites:
-        for i,read in enumerate(bamfile.fetch(region['chrom'], het_site['pos']-1, het_site['pos']+1)):
+        for i,read in enumerate(bamfile.fetch(region['chrom'], het_site['pos'], het_site['pos']+1)):
             if i > EXTENDED_RB_READ_GOAL:
                 continue
             if goodread(read):
-                mate = bamfile.mate(read)
+                try:
+                    mate = bamfile.mate(read)
+                except:
+                    mate = None
                 if goodread(mate):
                     read_coords = [read.reference_start,read.reference_end]
                     mate_coords = [mate.reference_start,mate.reference_end]
@@ -146,7 +148,6 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
                     read_sites[read.query_name].append(het_site)
                     site_reads[het_site['pos']].append(read.query_name)
                     fetched_reads[read.query_name] = [read,mate]
-    
     grouped_readsets = {
         'ref' : set(),
         'alt' : set()
@@ -195,13 +196,73 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
     return extended_grouped_reads
 
     
+def collect_reads_snv(bam_name, region, het_sites,ref,alt, discordant_len=None):
+    """
+    given an alignment file name, a de novo SNV region, 
+    and a list of heterozygous sites for haplotype grouping,
+    return the reads that support the variant as a dictionary with two lists,
+    containing reads that support and reads that don't
     
+    """
+    bamfile = pysam.AlignmentFile(bam_name, 'rb')
+
+    if not discordant_len:
+        discordant_len = estimate_discordant_insert_len(bamfile)
+
+    supporting_reads = []
+    position = int(region['start'])
+    try:
+        bam_iter = bamfile.fetch(
+            region['chrom'], 
+            position-1, 
+            position+1
+        )
+    except ValueError: 
+        chrom = region['chrom'].strip("chr") if "chr" in region['chrom'] else "chr"+region['chrom']
+        bam_iter = bamfile.fetch(
+                chrom, 
+                position, 
+                position+1
+        )
+    informative_reads = {
+        "alt" : supporting_reads,
+        "ref" : []
+    }
+    readcount = 0
+    for read in bam_iter:
+        if not goodread(read):
+            continue
+        #find mate for informative site check
+        try:
+            mate = bamfile.mate(read)
+            if not goodread(mate):
+                mate = None
+        except:
+            mate = None
+        
+        #find reads that support the alternate allele and reads that don't
+        read_allele = get_allele_at(read, mate, position)
+        if read_allele == ref:
+            informative_reads['ref'].append(read)
+            if mate:
+                informative_reads['ref'].append(mate)
+        elif read_allele == alt:
+            informative_reads['alt'].append(read)
+            if mate:
+                informative_reads['alt'].append(mate)
+    res = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    return res
+    #return informative_reads
+
+
+
+
 def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
     """
     given an alignment file name, a de novo SV region, 
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
-    containing reads that support and reads that don't (latter will be none in an SV)
+    containing reads that support and reads that don't
     
     """
     bamfile = pysam.AlignmentFile(bam_name, 'rb')
