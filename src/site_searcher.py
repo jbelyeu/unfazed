@@ -6,14 +6,12 @@ import sys
 def binary_search(start, end, informative_sites):
     matches = []
     query_start = 0
-    query_end = len(informative_sites)
+    query_end = len(informative_sites)-1
     query_start_prev = -1
     query_end_prev = -1
-
-    while (len(matches) <= 0 and query_end > 0):
-
+    while (len(matches) <= 0 and query_end > -1):
         #if the query region converges, no sites in read
-        if (query_start == query_end):
+        if (query_start > query_end):
             break
         #if the query region isn't changing, no sites in read
         if (query_start == query_start_prev) and (query_end == query_end_prev):
@@ -23,8 +21,8 @@ def binary_search(start, end, informative_sites):
         query_start_prev = query_start
         query_end_prev = query_end
         query_pos = int((query_end+query_start)/2)
-        
         #if the query position is between the start and the end of the read, we've arrived
+        #print(query_start, query_pos, query_end)
         if start <= informative_sites[query_pos]['pos'] < end:
             #keep the one that we found
             matches.append(informative_sites[query_pos])

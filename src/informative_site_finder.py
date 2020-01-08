@@ -7,12 +7,20 @@ HOM_ALT= 3
 HET = 1
 HOM_REF = 0
 
+def get_prefix(vcf):
+    chrom_prefix = ""
+    for var in vcf:
+        if "chr" in var.CHROM.lower():
+            chrom_prefix = var.CHROM[:3]
+        return chrom_prefix
+
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
-    loc_template = "{chrom}:{start}-{end}"
+    loc_template = "{prefix}{chrom}:{start}-{end}"
     if whole_region:
         locs.append(loc_template.format(
-            chrom=denovo['chrom'], 
+            prefix=get_prefix(vcf),
+            chrom=denovo['chrom'].strip("chr"), 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['end']) + extra)
         ))
@@ -128,7 +136,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
                 continue
 
             #male chrX variants have to come from mom
-            if variant.CHROM == 'X' and (denovo['sex'] == SEX_KEY['male']): 
+            if variant.CHROM == 'X' and (pedigrees[denovo['kid']]['sex'] == SEX_KEY['male']): 
                 continue
             genotypes = variant.gt_types
             candidate_parent = 'NA'
@@ -142,9 +150,9 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
                 'ref_allele'    : variant.REF,
                 'alt_allele'    : variant.ALT[0],
             }
-
             if ((genotypes[kid_idx] == HET) and 
-                    is_high_quality_site(dad_idx, ref_depths, alt_depths, genotypes, gt_quals)):
+                    is_high_quality_site(dad_idx, ref_depths, alt_depths, genotypes, gt_quals) and
+                    is_high_quality_site(mom_idx, ref_depths, alt_depths, genotypes, gt_quals)):
                 #variant usable for extended read-backed phasing
                 het_sites.append( {
                     'pos'           : variant.start,
@@ -163,8 +171,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
             if not (is_high_quality_site(dad_idx, ref_depths, alt_depths, genotypes, gt_quals) and  
                     is_high_quality_site(mom_idx, ref_depths, alt_depths, genotypes, gt_quals)): 
                 continue
-
-
 
             if genotypes[dad_idx] in (HET, HOM_ALT) and genotypes[mom_idx] == HOM_REF:
                 candidate['alt_parent'] = pedigrees[denovo['kid']]['dad']
@@ -197,14 +203,14 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
                     continue
             candidate_sites.append(candidate)
             #if this is an informative site, then don't use it as a het
-            if genotypes[kid_idx] == HET:
-                het_sites.pop()
+            #if genotypes[kid_idx] == HET:
+            #    het_sites.pop()
 
 
         denovo['candidate_sites'] = sorted(candidate_sites, key=lambda x: x['pos'])
         denovo['het_sites'] = sorted(het_sites, key=lambda x: x['pos'])
-
         dnms[i] = denovo
+
     return dnms
 
 
