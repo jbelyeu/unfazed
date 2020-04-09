@@ -13,6 +13,7 @@ def get_prefix(vcf):
         if "chr" in var.CHROM.lower():
             chrom_prefix = var.CHROM[:3]
         return chrom_prefix
+    return ""
 
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
@@ -26,11 +27,13 @@ def get_position(vcf, denovo, extra, whole_region):
         ))
     else:
         locs.append(loc_template.format(
+            prefix=get_prefix(vcf),
             chrom=denovo['chrom'], 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['start']) + extra)
         ))
         locs.append(loc_template.format(
+            prefix=get_prefix(vcf),
             chrom=denovo['chrom'], 
             start=(int(denovo['end']) - extra), 
             end=(int(denovo['end']) + extra)
