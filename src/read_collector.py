@@ -124,7 +124,21 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
     read_sites = {}
     site_reads = {}
     for het_site in het_sites:
-        for i,read in enumerate(bamfile.fetch(region['chrom'], het_site['pos'], het_site['pos']+1)):
+        try:
+            bam_iter = bamfile.fetch(
+                region['chrom'], 
+                het_site['pos'], 
+                het_site['pos']+1
+            )
+        except ValueError: 
+            chrom = region['chrom'].strip("chr") if "chr" in region['chrom'] else "chr"+region['chrom']
+            bam_iter = bamfile.fetch(
+                    chrom, 
+                    het_site['pos'], 
+                    het_site['pos']+1
+            )
+
+        for i,read in enumerate(bam_iter):
             if i > EXTENDED_RB_READ_GOAL:
                 continue
             if goodread(read):
@@ -274,11 +288,24 @@ def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
     var_len = abs(float(region['end'])-float(region['start']))
     for position in region['start'],region['end']:
         position = int(position)
-        bam_iter = bamfile.fetch(
-            region['chrom'], 
-            position-discordant_len, 
-            position+discordant_len
-        )
+        try:
+            bam_iter = bamfile.fetch(
+                region['chrom'], 
+                position-discordant_len, 
+                position+discordant_len
+            )
+        except ValueError:
+            chrom = region['chrom']
+            if "chr" in chrom:
+                chrom = chrom.replace("chr","")
+            else:
+                chrom = "chr"+chrom
+
+            bam_iter = bamfile.fetch(
+                chrom,
+                position-discordant_len, 
+                position+discordant_len
+            )
         readcount = 0
         for read in bam_iter:
             if not goodread(read):
