@@ -135,7 +135,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
         # loop over all variants in the VCF within search_dist bases from the DNM
         for variant in get_position(vcf, denovo, search_dist, whole_region):
             # ignore more complex variants for now
-            if ((len(variant.REF) > 1) or (len(variant.ALT) > 1) or ('*' in variant.ALT or len(variant.ALT[0]) > 1)): 
+            if (len(variant.ALT) != 1 or (len(variant.REF) > 1) or ('*' in variant.ALT or len(variant.ALT[0]) > 1)): 
                 continue
 
             #male chrX variants have to come from mom
