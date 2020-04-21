@@ -138,6 +138,8 @@ def run_read_phasing(dnms, pedigrees, vcf):
             "start" : denovo['start'],
             "end" : denovo['end'],
         }
+        if denovo['kid'] not in sample_dict:
+            continue
         ref,alts = get_refalt(region['chrom'],region['start'],vcf_filehandle, sample_dict[denovo['kid']])
         if len(alts) < 1:
             print("No usable genotype for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
@@ -146,6 +148,8 @@ def run_read_phasing(dnms, pedigrees, vcf):
             print("Too many genotypes for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
             continue
         alt = alts[0]
+        if 'candidate_sites' not in denovo:
+            continue
         informative_sites = denovo['candidate_sites']
 
         if len(informative_sites) <= 0:

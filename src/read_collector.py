@@ -276,7 +276,7 @@ def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
         position = int(position)
         bam_iter = bamfile.fetch(
             region['chrom'], 
-            position-discordant_len, 
+            max(0,position-discordant_len), 
             position+discordant_len
         )
         readcount = 0

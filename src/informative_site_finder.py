@@ -17,6 +17,7 @@ def get_prefix(vcf):
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
     loc_template = "{prefix}{chrom}:{start}-{end}"
+    prefix = ''
     if whole_region:
         locs.append(loc_template.format(
             prefix=get_prefix(vcf),
@@ -26,11 +27,13 @@ def get_position(vcf, denovo, extra, whole_region):
         ))
     else:
         locs.append(loc_template.format(
+            prefix=prefix,
             chrom=denovo['chrom'], 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['start']) + extra)
         ))
         locs.append(loc_template.format(
+            prefix=prefix,
             chrom=denovo['chrom'], 
             start=(int(denovo['end']) - extra), 
             end=(int(denovo['end']) + extra)
@@ -114,7 +117,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     
     if len(dnms) <= 0:
         return
-    
     SEX_KEY = {
         'male' : 1,
         'female': 2
@@ -123,9 +125,23 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     vcf = VCF(vcf_name)
     sample_dict = dict(zip(vcf.samples, range(len(vcf.samples))))
     for i,denovo in enumerate(dnms):
-        kid_idx = sample_dict[denovo['kid']]
-        dad_idx = sample_dict[pedigrees[denovo['kid']]['dad']]
-        mom_idx = sample_dict[pedigrees[denovo['kid']]['mom']]
+        kid_id = denovo['kid']
+        dad_id = pedigrees[denovo['kid']]['dad']
+        mom_id = pedigrees[denovo['kid']]['mom']
+        missing = False
+        for sample_id in [kid_id,dad_id,mom_id]:
+            if sample_id not in sample_dict:
+                print("{} missing from SNV bcf")
+                missing = True
+        if missing:
+            continue
+
+        try:
+            kid_idx = sample_dict[denovo['kid']]
+            dad_idx = sample_dict[pedigrees[denovo['kid']]['dad']]
+            mom_idx = sample_dict[pedigrees[denovo['kid']]['mom']]
+        except Exception as e:
+            continue
         
         candidate_sites = [] 
         het_sites = []
