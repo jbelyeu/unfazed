@@ -18,22 +18,23 @@ def get_prefix(vcf):
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
     loc_template = "{prefix}{chrom}:{start}-{end}"
+    prefix = get_prefix(vcf)
     if whole_region:
         locs.append(loc_template.format(
-            prefix=get_prefix(vcf),
+            prefix=prefix,
             chrom=denovo['chrom'].strip("chr"), 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['end']) + extra)
         ))
     else:
         locs.append(loc_template.format(
-            prefix=get_prefix(vcf),
+            prefix=prefix,
             chrom=denovo['chrom'], 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['start']) + extra)
         ))
         locs.append(loc_template.format(
-            prefix=get_prefix(vcf),
+            prefix=prefix,
             chrom=denovo['chrom'], 
             start=(int(denovo['end']) - extra), 
             end=(int(denovo['end']) + extra)
@@ -74,7 +75,7 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals,
 def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
     kid_allele = None
     if ((denovo['svtype'] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4):
-        #large deletions can be gentyped by hemizygous inheritance of informative alleles
+        #large deletions can be genotyped by hemizygous inheritance of informative alleles
         if (genotypes[kid_idx] == HOM_ALT):
             kid_allele = 'ref_parent'   
         elif (genotypes[kid_idx] == HOM_REF):
@@ -117,7 +118,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     
     if len(dnms) <= 0:
         return
-    
     SEX_KEY = {
         'male' : 1,
         'female': 2
@@ -126,9 +126,23 @@ def find(dnms, pedigrees, vcf_name, search_dist, whole_region=True):
     vcf = VCF(vcf_name)
     sample_dict = dict(zip(vcf.samples, range(len(vcf.samples))))
     for i,denovo in enumerate(dnms):
-        kid_idx = sample_dict[denovo['kid']]
-        dad_idx = sample_dict[pedigrees[denovo['kid']]['dad']]
-        mom_idx = sample_dict[pedigrees[denovo['kid']]['mom']]
+        kid_id = denovo['kid']
+        dad_id = pedigrees[denovo['kid']]['dad']
+        mom_id = pedigrees[denovo['kid']]['mom']
+        missing = False
+        for sample_id in [kid_id,dad_id,mom_id]:
+            if sample_id not in sample_dict:
+                print("{} missing from SNV bcf")
+                missing = True
+        if missing:
+            continue
+
+        try:
+            kid_idx = sample_dict[denovo['kid']]
+            dad_idx = sample_dict[pedigrees[denovo['kid']]['dad']]
+            mom_idx = sample_dict[pedigrees[denovo['kid']]['mom']]
+        except Exception as e:
+            continue
         
         candidate_sites = [] 
         het_sites = []

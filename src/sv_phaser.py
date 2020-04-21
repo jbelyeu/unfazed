@@ -73,8 +73,9 @@ def phase_by_reads(matches):
                     origin_parent_data[match['ref_parent']] = []
                     origin_parent_data[match['alt_parent']] = []
                 #to avoid issues from indels, use the reference position to index the read
-                read_pos = read.get_reference_positions(full_length=True).index(match['pos'])
-                if not read_pos:
+                try:
+                    read_pos = read.get_reference_positions(full_length=True).index(match['pos'])
+                except:
                     continue
                 kid_allele = read.query_sequence[read_pos]
 
@@ -134,6 +135,8 @@ def run_read_phasing(dnms, pedigrees, vcf):
             "end" : denovo['end'],
         }
         
+        if "candidate_sites" not in denovo:
+            continue
         informative_sites = denovo['candidate_sites']
 
         if len(informative_sites) <= 0:
@@ -201,7 +204,8 @@ def run_cnv_phasing(dnms, pedigrees, vcf):
             "end" : int(denovo['end']),
         }
 
-
+        if 'candidate_sites' not in denovo:
+            continue
         origin_data = phase_by_snvs(denovo['candidate_sites'])
         evidence_items = {
             dad_id : ["NA"],
