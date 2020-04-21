@@ -13,14 +13,15 @@ def get_prefix(vcf):
         if "chr" in var.CHROM.lower():
             chrom_prefix = var.CHROM[:3]
         return chrom_prefix
+    return ""
 
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
     loc_template = "{prefix}{chrom}:{start}-{end}"
-    prefix = ''
+    prefix = get_prefix(vcf)
     if whole_region:
         locs.append(loc_template.format(
-            prefix=get_prefix(vcf),
+            prefix=prefix,
             chrom=denovo['chrom'].strip("chr"), 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['end']) + extra)
@@ -74,7 +75,7 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals,
 def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
     kid_allele = None
     if ((denovo['svtype'] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4):
-        #large deletions can be gentyped by hemizygous inheritance of informative alleles
+        #large deletions can be genotyped by hemizygous inheritance of informative alleles
         if (genotypes[kid_idx] == HOM_ALT):
             kid_allele = 'ref_parent'   
         elif (genotypes[kid_idx] == HOM_REF):
