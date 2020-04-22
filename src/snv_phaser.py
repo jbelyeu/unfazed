@@ -192,7 +192,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
 
 def run_read_phasing(dnms, pedigrees, vcf, threads):
     #get informative sites near SNVs for read-backed phasing
-    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, args.threads, whole_region=True)
+    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, args.threads, whole_region=False)
     records={}
     executor = ThreadPoolExecutor(threads)
     futures = []
