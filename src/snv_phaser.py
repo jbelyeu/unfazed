@@ -7,6 +7,7 @@ import read_collector
 import site_searcher
 import informative_site_finder
 from cyvcf2 import VCF
+from concurrent.futures import ThreadPoolExecutor,wait
 
 MILLION=1000000
 MIN_MAPQ=1
@@ -24,7 +25,7 @@ def setup_args():
     parser.add_argument(
         "-v", 
         "--vcf", 
-        help="vcf file of SNVs to identify informative sites. Must contain each kid and both parents",
+        help="sorted/bgzipped/indexed vcf/bcf file of SNVs to identify informative sites. Must contain each kid and both parents",
         #default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/snv/hg38/18-01-23_WashU-Yandell-CEPH_Sent.Final_1552990128.vcf.gz")
         default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph_37.vcf.gz")
 
@@ -34,6 +35,14 @@ def setup_args():
         help="ped file including the kid and both parent IDs", 
         type=str, 
         default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
+    
+    parser.add_argument(
+        "-t", 
+        "--threads", 
+        help="number of threads to use", 
+        type=int, 
+        default=4)
+
 
     return parser.parse_args()
 
@@ -123,77 +132,88 @@ def get_refalt(chrom, pos, vcf_filehandle, kid_idx):
             alts.append(alt)
     return ref,alts
 
-
-
-def run_read_phasing(dnms, pedigrees, vcf):
-    #get informative sites near SNVs for read-backed phasing
-    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, whole_region=True)
+def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     vcf_filehandle = VCF(vcf)
     sample_dict = dict(zip(vcf_filehandle.samples, range(len(vcf_filehandle.samples))))
 
+    region = {
+        "chrom" : denovo['chrom'],
+        "start" : denovo['start'],
+        "end" : denovo['end'],
+    }
+    if denovo['kid'] not in sample_dict:
+        return
+    ref,alts = get_refalt(region['chrom'],region['start'],vcf_filehandle, sample_dict[denovo['kid']])
+    if len(alts) < 1:
+        print("No usable genotype for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+        return
+    elif len(alts) > 1:
+        print("Too many genotypes for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+        return
+    alt = alts[0]
+    informative_sites = denovo['candidate_sites']
+
+    #these are reads that support the ref or alt allele of the de novo variant
+    dnm_reads = read_collector.collect_reads_snv(denovo['bam'], region, denovo['het_sites'], ref,alt)
+    matches = site_searcher.match_informative_sites(dnm_reads, informative_sites)
+
+    if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
+        print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+        return
+
+    counts = phase_by_reads(matches)
+    
+    #did I put ternary operators and list comprehension in the same lines? What's wrong with me?
+    dad_informative_sites = list(set([ str(c[1]) for c in counts[dad_id]])) if dad_id in counts else ["NA"]
+    dad_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")" for c in counts[dad_id]]))) if dad_id in counts else "NA"
+    dad_readnames = list(set([c[0].query_name for c in counts[dad_id]])) if dad_id in counts else False
+    mom_informative_sites = list(set([ str(c[1]) for c in counts[mom_id]])) if mom_id in counts else ["NA"]
+    mom_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")"for c in counts[mom_id]]))) if mom_id in counts else "NA"
+    mom_readnames = list(set([c[0].query_name for c in counts[mom_id]])) if mom_id in counts else False
+
+    record = {
+        'region'            : region,
+        'var_type'            : denovo['var_type'],
+        'kid'               : denovo['kid'],
+        'dad'               : dad_id,
+        'mom'               : mom_id,
+        'dad_site_count'    : len(dad_informative_sites),
+        'mom_site_count'    : len(mom_informative_sites),
+        'dad_sites'         : ",".join(dad_informative_sites),
+        'mom_sites'         : ",".join(mom_informative_sites),
+        'evidence_type'     : "readbacked",
+        'dad_reads'         : dad_reads,
+        'mom_reads'         : mom_reads,
+        'dad_readnames'     : dad_readnames,
+        'mom_readnames'     : mom_readnames,
+    }
+    key = list(region.values())+[denovo['kid'], denovo['var_type']]
+    records["_".join(key)] = record
+
+def run_read_phasing(dnms, pedigrees, vcf, threads):
+    #get informative sites near SNVs for read-backed phasing
+    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, args.threads, whole_region=True)
     records={}
+    executor = ThreadPoolExecutor(threads)
+    futures = []
+
     for denovo in dnms_with_informative_sites:
-        region = {
-            "chrom" : denovo['chrom'],
-            "start" : denovo['start'],
-            "end" : denovo['end'],
-        }
-        if denovo['kid'] not in sample_dict:
-            continue
-        ref,alts = get_refalt(region['chrom'],region['start'],vcf_filehandle, sample_dict[denovo['kid']])
-        if len(alts) < 1:
-            print("No usable genotype for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
-            continue
-        elif len(alts) > 1:
-            print("Too many genotypes for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
-            continue
-        alt = alts[0]
-        if 'candidate_sites' not in denovo:
-            continue
-        informative_sites = denovo['candidate_sites']
-
-        if len(informative_sites) <= 0:
-            print("No usable informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
-            continue
-
-        #these are reads that support the ref or alt allele of the de novo variant
-        dnm_reads = read_collector.collect_reads_snv(denovo['bam'], region, denovo['het_sites'], ref,alt)
-        matches = site_searcher.match_informative_sites(dnm_reads, informative_sites)
-
-        if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
-            print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
-            continue
-
-        counts = phase_by_reads(matches)
         dad_id = pedigrees[denovo['kid']]['dad']
         mom_id = pedigrees[denovo['kid']]['mom']
-        
-        #did I put ternary operators and list comprehension in the same lines? What's wrong with me?
-        dad_informative_sites = list(set([ str(c[1]) for c in counts[dad_id]])) if dad_id in counts else ["NA"]
-        dad_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")" for c in counts[dad_id]]))) if dad_id in counts else "NA"
-        dad_readnames = list(set([c[0].query_name for c in counts[dad_id]])) if dad_id in counts else False
-        mom_informative_sites = list(set([ str(c[1]) for c in counts[mom_id]])) if mom_id in counts else ["NA"]
-        mom_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")"for c in counts[mom_id]]))) if mom_id in counts else "NA"
-        mom_readnames = list(set([c[0].query_name for c in counts[mom_id]])) if mom_id in counts else False
 
-        record = {
-            'region'            : region,
-            'var_type'            : denovo['var_type'],
-            'kid'               : denovo['kid'],
-            'dad'               : dad_id,
-            'mom'               : mom_id,
-            'dad_site_count'    : len(dad_informative_sites),
-            'mom_site_count'    : len(mom_informative_sites),
-            'dad_sites'         : ",".join(dad_informative_sites),
-            'mom_sites'         : ",".join(mom_informative_sites),
-            'evidence_type'     : "readbacked",
-            'dad_reads'         : dad_reads,
-            'mom_reads'         : mom_reads,
-            'dad_readnames'     : dad_readnames,
-            'mom_readnames'     : mom_readnames,
-        }
-        key = list(region.values())+[denovo['kid'], denovo['var_type']]
-        records["_".join(key)] = record
+        if 'candidate_sites' not in denovo or len(denovo['candidate_sites']) == 0:
+            print("No usable informative sites for variant {}:{}-{}".format(
+                denovo['chrom'], denovo['start'], denovo['end']), file=sys.stderr)
+            continue
+        futures.append(executor.submit(
+            multithread_read_phasing, 
+            denovo, 
+            records, 
+            vcf, 
+            dad_id, 
+            mom_id
+        ))
+    wait(futures)
     return records
 
 
@@ -234,7 +254,7 @@ def main(args):
         "{other_parent_reads}",
 
     ])
-    read_records = run_read_phasing(dnms, pedigrees, args.vcf)
+    read_records = run_read_phasing(dnms, pedigrees, args.vcf, args.threads)
     merged_records = []
 
     for key in read_records:
