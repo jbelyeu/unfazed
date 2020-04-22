@@ -41,7 +41,7 @@ def setup_args():
         "--threads", 
         help="number of threads to use", 
         type=int, 
-        default=4)
+        default=2)
 
 
     return parser.parse_args()

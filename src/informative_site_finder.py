@@ -35,16 +35,17 @@ def get_position(vcf, denovo, extra, whole_region):
     else:
         locs.append(loc_template.format(
             prefix=prefix,
-            chrom=denovo['chrom'], 
+            chrom=denovo['chrom'].strip("chr"), 
             start=(int(denovo['start']) - extra), 
             end=(int(denovo['start']) + extra)
         ))
-        locs.append(loc_template.format(
-            prefix=prefix,
-            chrom=denovo['chrom'], 
-            start=(int(denovo['end']) - extra), 
-            end=(int(denovo['end']) + extra)
-        ))
+        if (int(denovo['end'])-int(denovo['start'])) > extra:
+            locs.append(loc_template.format(
+                prefix=prefix,
+                chrom=denovo['chrom'].strip("chr"), 
+                start=(int(denovo['end']) - extra), 
+                end=(int(denovo['end']) + extra)
+            ))
     for loc in locs:
         for variant in vcf(loc):
             yield variant
