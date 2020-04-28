@@ -4,7 +4,7 @@ from __future__ import print_function
 import sys
 import pysam
 import numpy as np
-from site_searcher import binary_search
+from .site_searcher import binary_search
 MILLION=1000000
 MIN_MAPQ=1
 STDEV_COUNT=3
