@@ -224,9 +224,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
                 if not unique_allele:
                     continue
             candidate_sites.append(candidate)
-            #if this is an informative site, then don't use it as a het
-            #if genotypes[kid_idx] == HET:
-            #    het_sites.pop()
 
 
         denovo['candidate_sites'] = sorted(candidate_sites, key=lambda x: x['pos'])
@@ -429,22 +426,34 @@ def find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True
     samples_by_location,vars_by_sample,chrom_ranges = create_lookups(dnms)
     chroms = set([dnm['chrom'] for dnm in dnms])
 
-    executor = ThreadPoolExecutor(threads)
-    futures = []
+    if threads != 1:
+        executor = ThreadPoolExecutor(threads)
+        futures = []
     for chrom in chroms:
-        futures.append(executor.submit(
-            multithread_find_many, 
-            vcf_name,
-            chrom, 
-            chrom_ranges[chrom],
-            samples_by_location, 
-            vars_by_sample, 
-            search_dist, 
-            pedigrees,
-            whole_region
-        ))
-    
-    wait(futures)
+        if threads != 1:
+            futures.append(executor.submit(
+                multithread_find_many, 
+                vcf_name,
+                chrom,
+                chrom_ranges[chrom],
+                samples_by_location,
+                vars_by_sample,
+                search_dist,
+                pedigrees,
+                whole_region
+            ))
+        else:
+            multithread_find_many(
+                vcf_name,
+                chrom,
+                chrom_ranges[chrom],
+                samples_by_location,
+                vars_by_sample,
+                search_dist,
+                pedigrees,
+                whole_region)
+    if threads != 1:
+        wait(futures)
 
     dnms_annotated = []
     for sample in vars_by_sample:
@@ -456,7 +465,6 @@ def find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True
                     if 'het_sites' in denovo:
                         denovo['het_sites'] = sorted(denovo['het_sites'], key=lambda x: x['pos'])
                     dnms_annotated.append(denovo)
-
     return dnms_annotated
 
 
