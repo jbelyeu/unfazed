@@ -3,36 +3,37 @@ from __future__ import print_function
 # Python 2/3 compatibility
 import sys
 import argparse
-import read_collector
-import site_searcher
-import informative_site_finder
+
+from .read_collector import collect_reads_sv
+from .site_searcher import match_informative_sites
+from .informative_site_finder import find
 
 MILLION=1000000
 MIN_MAPQ=1
 STDEV_COUNT=3
 
-def setup_args():
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument(
-        "-d", 
-        "--dnms", 
-        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location",
-        default="dnms.bed")
-
-    parser.add_argument(
-        "-v", 
-        "--vcf", 
-        help="vcf file of SNVs to identify informative sites. Must contain each kid and both parents",
-        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph.bcf")
-
-    parser.add_argument(
-        "-p", 
-        "--ped", 
-        help="ped file including the kid and both parent IDs", 
-        type=str, 
-        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
-
-    return parser.parse_args()
+#def setup_args():
+#    parser = argparse.ArgumentParser(description="")
+#    parser.add_argument(
+#        "-d", 
+#        "--dnms", 
+#        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location",
+#        default="dnms.bed")
+#
+#    parser.add_argument(
+#        "-v", 
+#        "--vcf", 
+#        help="vcf file of SNVs to identify informative sites. Must contain each kid and both parents",
+#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph.bcf")
+#
+#    parser.add_argument(
+#        "-p", 
+#        "--ped", 
+#        help="ped file including the kid and both parent IDs", 
+#        type=str, 
+#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
+#
+#    return parser.parse_args()
 
 def parse_ped(ped, kids):
     labels = ["kid","dad", "mom","sex"]
@@ -125,7 +126,7 @@ def phase_by_snvs(informative_sites):
 
 def run_read_phasing(dnms, pedigrees, vcf):
     #get informative sites near the breakpoints of SVs for reab-backed phasing
-    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, whole_region=False)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 5000, whole_region=False)
     records={}
     for denovo in dnms_with_informative_sites:
 
@@ -144,8 +145,8 @@ def run_read_phasing(dnms, pedigrees, vcf):
             continue
 
         #these are reads that support the ref or alt allele of the de novo variant
-        dnm_reads = read_collector.collect_reads_sv(denovo['bam'], region, denovo['het_sites'])
-        matches = site_searcher.match_informative_sites(dnm_reads, informative_sites)
+        dnm_reads = collect_reads_sv(denovo['bam'], region, denovo['het_sites'])
+        matches = match_informative_sites(dnm_reads, informative_sites)
 
         if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
             print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
@@ -189,7 +190,7 @@ def run_cnv_phasing(dnms, pedigrees, vcf):
     Specialized phasing for CNVs, using the informative sites from the region with a copy-number change
     """
     #get informative sites inside CNVs for purely SNV-based phasing
-    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, args.vcf, 0)
+    dnms_with_informative_sites = find(dnms, pedigrees, args.vcf, 0)
     records = {}
     for denovo in dnms_with_informative_sites:
         dad_id = pedigrees[denovo['kid']]['dad']
@@ -236,7 +237,7 @@ def run_cnv_phasing(dnms, pedigrees, vcf):
     return records
 
 
-def main(args):
+def phase_svs(args):
     dnms,kids = parse_bed(args.dnms)
     pedigrees = parse_ped(args.ped, kids)
 
@@ -418,6 +419,6 @@ def main(args):
 
     
 
-if __name__ == "__main__":
-    args = setup_args()
-    main(args)
+#if __name__ == "__main__":
+#    args = setup_args()
+#    main(args)
