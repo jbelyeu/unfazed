@@ -3,74 +3,65 @@ from __future__ import print_function
 # Python 2/3 compatibility
 import sys
 import argparse
-import read_collector
-import site_searcher
-import informative_site_finder
 from cyvcf2 import VCF
 from concurrent.futures import ThreadPoolExecutor,wait
+
+
+from .read_collector import collect_reads_snv
+from .site_searcher import match_informative_sites
+from .informative_site_finder import find,get_prefix
 
 MILLION=1000000
 MIN_MAPQ=1
 STDEV_COUNT=3
 
-def setup_args():
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument(
-        "-d", 
-        "--dnms", 
-        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location, var_type",
-        #default="/Users/jon/Research/scripts/de_novo_sv/unfazed/snvs.bed")
-        default="/Users/jon/Research/scripts/de_novo_sv/unfazed/8346.bed")
+#def setup_args():
+#    parser = argparse.ArgumentParser(description="")
+#    parser.add_argument(
+#        "-d", 
+#        "--dnms", 
+#        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location, vartype",
+#        #default="/Users/jon/Research/scripts/de_novo_sv/unfazed/snvs.bed")
+#        default="/Users/jon/Research/scripts/de_novo_sv/unfazed/8346.bed")
+#
+#    parser.add_argument(
+#        "-v", 
+#        "--vcf", 
+#        help="sorted/bgzipped/indexed vcf/bcf file of SNVs to identify informative sites. Must contain each kid and both parents",
+#        #default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/snv/hg38/18-01-23_WashU-Yandell-CEPH_Sent.Final_1552990128.vcf.gz")
+#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph_37.vcf.gz")
+#
+#    parser.add_argument(
+#        "-p", 
+#        "--ped", 
+#        help="ped file including the kid and both parent IDs", 
+#        type=str, 
+#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
+#    
+#    parser.add_argument(
+#        "-t", 
+#        "--threads", 
+#        help="number of threads to use", 
+#        type=int, 
+#        default=2)
+#
+#    return parser.parse_args()
 
-    parser.add_argument(
-        "-v", 
-        "--vcf", 
-        help="sorted/bgzipped/indexed vcf/bcf file of SNVs to identify informative sites. Must contain each kid and both parents",
-        #default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/snv/hg38/18-01-23_WashU-Yandell-CEPH_Sent.Final_1552990128.vcf.gz")
-        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph_37.vcf.gz")
-
-    parser.add_argument(
-        "-p", 
-        "--ped", 
-        help="ped file including the kid and both parent IDs", 
-        type=str, 
-        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
-    
-    parser.add_argument(
-        "-t", 
-        "--threads", 
-        help="number of threads to use", 
-        type=int, 
-        default=2)
-
-
-    return parser.parse_args()
-
-def parse_ped(ped, kids):
-    labels = ["kid","dad", "mom","sex"]
-    kid_entries = {}
-    with open(ped, 'r') as pedfile:
-        for line in pedfile:
-            fields = line.strip().split()
-            if fields[1] in kids:
-                kid_entries[fields[1]] = dict(zip(labels,fields[1:5]))
-    return kid_entries
-
-def parse_bed(bed):
-    labels = ["chrom","start", "end","kid", "bam","var_type"]
-    kids = []
-    dnms = []
-    with open(bed, 'r') as bedfile:
-        for line in bedfile:
-            if line[0] == '#': continue
-            #TODO add formatting checks to make sure all the necessary fields are present
-            dnms.append(dict(zip(labels,line.strip().split()[:6])))
-            try:
-                dnms[-1][0] = int(dnms[-1][0])
-            except KeyError:
-                pass
-            kids.append(dnms[-1]['kid'])
-    return dnms, kids
+#def parse_bed(bed):
+#    labels = ["chrom","start", "end","kid", "bam","vartype"]
+#    kids = []
+#    dnms = []
+#    with open(bed, 'r') as bedfile:
+#        for line in bedfile:
+#            if line[0] == '#': continue
+#            #TODO add formatting checks to make sure all the necessary fields are present
+#            dnms.append(dict(zip(labels,line.strip().split()[:6])))
+#            try:
+#                dnms[-1][0] = int(dnms[-1][0])
+#            except KeyError:
+#                pass
+#            kids.append(dnms[-1]['kid'])
+#    return dnms, kids
 
 
 def phase_by_reads(matches):
@@ -121,11 +112,12 @@ def phase_by_reads(matches):
 def get_refalt(chrom, pos, vcf_filehandle, kid_idx):
     alts = []
     ref = None
-    for variant in vcf_filehandle("{}{}:{}-{}".format(
-            informative_site_finder.get_prefix(vcf_filehandle),
-            chrom.strip("chr"),
-            pos,
-            int(pos)+1)):
+    region = "{}{}:{}-{}".format(
+        get_prefix(vcf_filehandle),
+        chrom.strip("chr"),
+        pos,
+        int(pos)+1)
+    for variant in vcf_filehandle(region):
         if ref == None:
             ref = variant.REF
         for alt in variant.ALT:
@@ -154,13 +146,12 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     informative_sites = denovo['candidate_sites']
 
     #these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads = read_collector.collect_reads_snv(denovo['bam'], region, denovo['het_sites'], ref,alt)
-    matches = site_searcher.match_informative_sites(dnm_reads, informative_sites)
+    dnm_reads = collect_reads_snv(denovo['bam'], region, denovo['het_sites'], ref,alt)
+    matches = match_informative_sites(dnm_reads, informative_sites)
 
     if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
         print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
         return
-
     counts = phase_by_reads(matches)
     
     #did I put ternary operators and list comprehension in the same lines? What's wrong with me?
@@ -173,7 +164,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
 
     record = {
         'region'            : region,
-        'var_type'            : denovo['var_type'],
+        'vartype'          : denovo['vartype'],
         'kid'               : denovo['kid'],
         'dad'               : dad_id,
         'mom'               : mom_id,
@@ -187,15 +178,17 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
         'dad_readnames'     : dad_readnames,
         'mom_readnames'     : mom_readnames,
     }
-    key = list(region.values())+[denovo['kid'], denovo['var_type']]
+    key = [str(v) for v in region.values()]+[denovo['kid'], denovo['vartype']]
     records["_".join(key)] = record
+
 
 def run_read_phasing(dnms, pedigrees, vcf, threads):
     #get informative sites near SNVs for read-backed phasing
-    dnms_with_informative_sites = informative_site_finder.find(dnms, pedigrees, vcf, 5000, args.threads, whole_region=False)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 5000, threads, whole_region=False)
     records={}
-    executor = ThreadPoolExecutor(threads)
-    futures = []
+    if threads != 1:
+        executor = ThreadPoolExecutor(threads)
+        futures = []
 
     for denovo in dnms_with_informative_sites:
         dad_id = pedigrees[denovo['kid']]['dad']
@@ -205,119 +198,123 @@ def run_read_phasing(dnms, pedigrees, vcf, threads):
             print("No usable informative sites for variant {}:{}-{}".format(
                 denovo['chrom'], denovo['start'], denovo['end']), file=sys.stderr)
             continue
-        futures.append(executor.submit(
-            multithread_read_phasing, 
-            denovo, 
-            records, 
-            vcf, 
-            dad_id, 
-            mom_id
-        ))
-    wait(futures)
+        if threads != 1:
+            futures.append(executor.submit(
+                multithread_read_phasing, 
+                denovo, 
+                records, 
+                vcf, 
+                dad_id, 
+                mom_id
+            ))
+        else:
+            multithread_read_phasing(denovo, records, vcf, dad_id, mom_id)
+    if threads != 1:
+        wait(futures)
     return records
 
 
 
-def main(args):
-    dnms,kids = parse_bed(args.dnms)
-    pedigrees = parse_ped(args.ped, kids)
+#def phase_snvs(args):
+def phase_snvs(dnms, kids, pedigrees, sites, threads):
+    return run_read_phasing(dnms, pedigrees, sites, threads)
+    #dnms,kids = parse_bed(args.dnms)
+    #pedigrees = parse_ped(args.ped, kids)
 
-    header = [
-        "#chrom", 
-        "start",
-        "end",
-        "var_type",
-        "kid",
-        "origin_parent",
-        "other_parent",
-        "evidence_count",
-        "evidence_types",
-        "origin_parent_sites", 
-        "origin_parent_reads",
-        "other_parent_sites",
-        "other_parent_reads",
-    ]
-    print("\t".join(header))
-    template = "\t".join([
-        "{chrom}",
-        "{start}",
-        "{end}",
-        "{var_type}",
-        "{kid}",
-        "{origin_parent}",
-        "{other_parent}",
-        "{evidence_count}",
-        "{evidence_types}",
-        "{origin_parent_sites}",
-        "{origin_parent_reads}",
-        "{other_parent_sites}",
-        "{other_parent_reads}",
-
-    ])
-    read_records = run_read_phasing(dnms, pedigrees, args.vcf, args.threads)
-    merged_records = []
-
-    for key in read_records:
-
-        dad_read_count = len(read_records[key]['dad_readnames'])
-        mom_read_count = len(read_records[key]['mom_readnames'])
-            
-        origin_parent_reads = "NA"
-        origin_parent = None
-        origin_parent_sites = None
-        evidence_count = 0
-        other_parent = None
-        other_parent_sites = None
-        other_parent_reads = "NA"
-        evidence_types = "READBACKED"
-        
-        if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
-            origin_parent = read_records[key]['dad']
-            other_parent = read_records[key]['mom']
-            evidence_count = dad_read_count
-            origin_parent_sites = read_records[key]['dad_sites']
-            origin_parent_reads = read_records[key]['dad_reads']
-            other_parent_sites = read_records[key]['mom_sites']
-            other_parent_reads = read_records[key]['mom_reads']
-        elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
-            origin_parent = read_records[key]['mom']
-            other_parent = read_records[key]['dad']
-            evidence_count = mom_read_count
-            origin_parent_sites = read_records[key]['mom_sites']
-            origin_parent_reads = read_records[key]['mom_reads']
-            other_parent_sites = read_records[key]['dad_sites']
-            other_parent_reads = read_records[key]['dad_reads']
-        else:
-            origin_parent = read_records[key]['dad']+"|"+read_records[key]['mom']
-            evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
-            origin_parent_sites = read_records[key]['dad_sites']
-            origin_parent_reads = read_records[key]['dad_reads']
-            other_parent_reads = read_records[key]['mom_reads']
-            other_parent_sites = read_records[key]['mom_sites']
-            evidence_types = "AMBIGUOUS_READBACKED"
-
-        merged_record = {
-            'chrom'                 :read_records[key]['region']['chrom'],
-            'start'                 :int(read_records[key]['region']['start']),
-            'end'                   :int(read_records[key]['region']['end']),
-            'var_type'                :read_records[key]['var_type'],
-            'kid'                   :read_records[key]['kid'],
-            'origin_parent'         :origin_parent,
-            'other_parent'          :other_parent,
-            'evidence_count'        :evidence_count,
-            'evidence_types'        :evidence_types,
-            'origin_parent_sites'   :origin_parent_sites,
-            'origin_parent_reads'   :origin_parent_reads,
-            'other_parent_sites'   :other_parent_sites,
-            'other_parent_reads'   :other_parent_reads,
-        }
-        merged_records.append(merged_record)
-    merged_records = sorted(merged_records, key = lambda x: (x['chrom'], x['start'], x['end']))
-    for mr in merged_records:
-        print(template.format(**mr))
+#    header = [
+#        "#chrom", 
+#        "start",
+#        "end",
+#        "vartype",
+#        "kid",
+#        "origin_parent",
+#        "other_parent",
+#        "evidence_count",
+#        "evidence_types",
+#        "origin_parent_sites", 
+#        "origin_parent_reads",
+#        "other_parent_sites",
+#        "other_parent_reads",
+#    ]
+#    print("\t".join(header))
+#    template = "\t".join([
+#        "{chrom}",
+#        "{start}",
+#        "{end}",
+#        "{vartype}",
+#        "{kid}",
+#        "{origin_parent}",
+#        "{other_parent}",
+#        "{evidence_count}",
+#        "{evidence_types}",
+#        "{origin_parent_sites}",
+#        "{origin_parent_reads}",
+#        "{other_parent_sites}",
+#        "{other_parent_reads}",
+#
+#    ])
+#    merged_records = []
+#
+#    for key in read_records:
+#        dad_read_count = len(read_records[key]['dad_readnames'])
+#        mom_read_count = len(read_records[key]['mom_readnames'])
+#            
+#        origin_parent_reads = "NA"
+#        origin_parent = None
+#        origin_parent_sites = None
+#        evidence_count = 0
+#        other_parent = None
+#        other_parent_sites = None
+#        other_parent_reads = "NA"
+#        evidence_types = "READBACKED"
+#        
+#        if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
+#            origin_parent = read_records[key]['dad']
+#            other_parent = read_records[key]['mom']
+#            evidence_count = dad_read_count
+#            origin_parent_sites = read_records[key]['dad_sites']
+#            origin_parent_reads = read_records[key]['dad_reads']
+#            other_parent_sites = read_records[key]['mom_sites']
+#            other_parent_reads = read_records[key]['mom_reads']
+#        elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
+#            origin_parent = read_records[key]['mom']
+#            other_parent = read_records[key]['dad']
+#            evidence_count = mom_read_count
+#            origin_parent_sites = read_records[key]['mom_sites']
+#            origin_parent_reads = read_records[key]['mom_reads']
+#            other_parent_sites = read_records[key]['dad_sites']
+#            other_parent_reads = read_records[key]['dad_reads']
+#        else:
+#            origin_parent = read_records[key]['dad']+"|"+read_records[key]['mom']
+#            evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
+#            origin_parent_sites = read_records[key]['dad_sites']
+#            origin_parent_reads = read_records[key]['dad_reads']
+#            other_parent_reads = read_records[key]['mom_reads']
+#            other_parent_sites = read_records[key]['mom_sites']
+#            evidence_types = "AMBIGUOUS_READBACKED"
+#
+#        merged_record = {
+#            'chrom'                 :read_records[key]['region']['chrom'],
+#            'start'                 :int(read_records[key]['region']['start']),
+#            'end'                   :int(read_records[key]['region']['end']),
+#            'vartype'                :read_records[key]['vartype'],
+#            'kid'                   :read_records[key]['kid'],
+#            'origin_parent'         :origin_parent,
+#            'other_parent'          :other_parent,
+#            'evidence_count'        :evidence_count,
+#            'evidence_types'        :evidence_types,
+#            'origin_parent_sites'   :origin_parent_sites,
+#            'origin_parent_reads'   :origin_parent_reads,
+#            'other_parent_sites'   :other_parent_sites,
+#            'other_parent_reads'   :other_parent_reads,
+#        }
+#        merged_records.append(merged_record)
+#    merged_records = sorted(merged_records, key = lambda x: (x['chrom'], x['start'], x['end']))
+#    for mr in merged_records:
+#        print(template.format(**mr))
 
     
 
-if __name__ == "__main__":
-    args = setup_args()
-    main(args)
+#if __name__ == "__main__":
+#    args = setup_args()
+#    main(args)
