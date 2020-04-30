@@ -448,8 +448,8 @@ def unfazed(args):
     if len(snvs) > 0:
         phased_snvs = phase_snvs(snvs, kids, pedigrees,args.sites, args.threads)
 
-
-    all_phased = {**phased_snvs, **phased_svs}
+    all_phased = phased_snvs
+    all_phased.update(phased_svs)
 
     if output_type == "vcf":
         write_vcf_output(args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile)
