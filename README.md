@@ -18,7 +18,7 @@ Copy-number variants allow an additional method of phasing, wherein potential he
 * In a duplication, the allele balance of the de novo CNV's origin parent should be about double in proportion to the allele from the other parent.
 
 ## How to use it 
-Unfazed is available for install from conda. You must have or install at least Python 3.5.
+Unfazed is available for install from conda. Requires at least Python 3.5.
 
 `conda install unfazed `
 
@@ -92,7 +92,36 @@ unfazed\
 
 This will print a bed file of phased variants. The input bed file must have the following tab-separated columns: chrom, start, end, kid_id, var_type, where var_type is SNV, INDEL, POINT, DEL, DUP, INV, INS, MEI, or BND.
 
+## Interpreting unfazed output
+The output options for unfazed are either an annotated version of the input VCF file or a BED file.
+
+### VCF annotations
+Unfazed adds three tags to the FORMAT field of the VCF.
+* UOP: origin parent, which may be paternal:0, maternal:1, or missing:-1
+* UOPS: support for the UOP call (count of informative sites)
+* UET: evidence type(s) for the UOP call, which may be 0:readbacked, 1:allele-balance (for CNVs only), 2:both, 3:ambiguous-A
+readbacked, 4:ambiguous-allele-balance, 5:ambiguous-both, -1:missing.
+
+VCF output is only possible when given `--dnms` is a VCF file.
+
+### BED output
+Either VCF or BED input can produce a BED as output, with the following columns: 
+```
+chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types
+```
+
+Additional information can be included by using the `--verbose` option, which will append the following columns
+
+```
+chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types	origin_parent_sites	origin_parent_reads	other_parent_sites	other_parent_reads
+```
+
+Evidence counts and types in BED output match those in VCF output.
+
+
+**Ambiguous results** derive from inconsistent phasing (different parent of origin indicated by different informative sites or reads. These may indicate sequencing errors or mosaic events and will *not* be reported unless the `--include-ambiguous` argument is included.
+
 ## Performance
 Many variants lack informative sites and are therefore can't be phased. Unfazed also makes no attempt to phase multiallelic sites (which should be very rare among de novo calls). Generally about 30% of de novo SNV/INDEL variants are phaseable via unfazed, and about 50% of CNV/SV variants. 
 
-The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield dimenishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended.
+The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield dimenishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended. (Expert note: running with 1 thread can often produce more informative error messages in the case of a silent failure)
