@@ -92,3 +92,7 @@ unfazed\
 
 This will print a bed file of phased variants. The input bed file must have the following tab-separated columns: chrom, start, end, kid_id, var_type, where var_type is SNV, INDEL, POINT, DEL, DUP, INV, INS, MEI, or BND.
 
+## Performance
+Many variants lack informative sites and are therefore can't be phased. Unfazed also makes no attempt to phase multiallelic sites (which should be very rare among de novo calls). Generally about 30% of de novo SNV/INDEL variants are phaseable via unfazed, and about 50% of CNV/SV variants. 
+
+The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield dimenishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended.
