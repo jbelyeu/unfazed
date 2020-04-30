@@ -1,11 +1,6 @@
 version: 2
 
 variables:
-  setup_p2: &setup_p2
-    run:
-      shell: /bin/bash
-      name: Setup Unfazed python2 dependencies
-      command: bash .circleci/setup.sh 2
   setup_p3: &setup_p3
     run:
       shell: /bin/bash
@@ -30,20 +25,6 @@ variables:
 
 
 jobs:
-  test-linux-python2:
-    <<: *linux
-    steps:
-      - checkout
-      - *setup_p2
-      - *install_unfazed 
-      - *run_func_tests
-  test-macos-python2:
-    <<: *macos
-    steps:
-      - checkout
-      - *setup_p2
-      - *install_unfazed
-      - *run_func_tests
   test-linux-python3:
     <<: *linux
     steps:
@@ -64,8 +45,6 @@ workflows:
   version: 2
   unfazed-func-tests:
     jobs:
-      - test-linux-python2
-      - test-macos-python2
       - test-linux-python3
       - test-macos-python3
   unfazed-nightly-func-tests:
@@ -77,7 +56,5 @@ workflows:
               only:
                 - master
     jobs:
-      - test-linux-python2
-      - test-macos-python2
       - test-linux-python3
       - test-macos-python3
