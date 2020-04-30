@@ -1,0 +1,7 @@
+This directory contains files needed for testing unfazed.
+
+* trio.ped: a pedigree file with minimal information about the relationship between samples in the test trio
+* trio_hets_snvs_chr22.vcf.gz: a vcf file of point mutations in chr22 that occur as heterozygotes in all three samples of the trio (proxy for de novo variants
+* trio_hets_svs_chr22.vcf.gz: a vcf file of structural variants in chr22 that occur as heterozygotes in the child of the trio, to increase the number of variants in the set (proxy for de novo variants)
+* trio_snvs_chr22.vcf.gz: a vcf file of point mutations in chr22 for use as informative sites to phase hets
+* na12878.bam. A BAM file with reads from chr22 within 5kb up and downstream from the coordinates of the variants in the het files

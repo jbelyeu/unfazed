@@ -3,6 +3,7 @@ from __future__ import print_function
 # Python 2/3 compatibility
 import sys
 import argparse
+from concurrent.futures import ThreadPoolExecutor,wait
 
 from .read_collector import collect_reads_sv
 from .site_searcher import match_informative_sites
@@ -46,7 +47,7 @@ def parse_ped(ped, kids):
     return kid_entries
 
 def parse_bed(bed):
-    labels = ["chrom","start", "end","kid", "bam","svtype"]
+    labels = ["chrom","start", "end","kid", "bam","vartype"]
     kids = []
     dnms = []
     with open(bed, 'r') as bedfile:
@@ -118,304 +119,370 @@ def phase_by_snvs(informative_sites):
     }
 
     #split informative sites up by the parent they say is responsible
-    for isite in informative_sites:
-        origin_parent_data[isite[isite['kid_allele']]].append(isite)
+    for informative_site in informative_sites:
+        origin_parent_data[informative_site[informative_site['kid_allele']]].append(informative_site)
     return origin_parent_data
 
+def multithread_read_phasing(denovo, records, dad_id, mom_id):
+    region = {
+        "chrom" : denovo['chrom'],
+        "start" : denovo['start'],
+        "end" : denovo['end'],
+    }
 
+    #these are reads that support the ref or alt allele of the de novo variant
+    dnm_reads = collect_reads_sv(denovo['bam'], region, denovo['het_sites'])
+    matches = match_informative_sites(dnm_reads, denovo['candidate_sites'])
 
-def run_read_phasing(dnms, pedigrees, vcf):
+    if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
+        print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+        return
+
+    counts = phase_by_reads(matches)
+    
+    #did I put terary operators and list comprehension in the same lines? What's wrong with me?
+    dad_informative_sites = list(set([ str(c[1]) for c in counts[dad_id]])) if dad_id in counts else ["NA"]
+    dad_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")" for c in counts[dad_id]]))) if dad_id in counts else "NA"
+    dad_readnames = list(set([c[0].query_name for c in counts[dad_id]])) if dad_id in counts else False
+    mom_informative_sites = list(set([ str(c[1]) for c in counts[mom_id]])) if mom_id in counts else ["NA"]
+    mom_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")"for c in counts[mom_id]]))) if mom_id in counts else "NA"
+    mom_readnames = list(set([c[0].query_name for c in counts[mom_id]])) if mom_id in counts else False
+
+    record = {
+        'region'            : region,
+        'vartype'           : denovo['vartype'],
+        'kid'               : denovo['kid'],
+        'dad'               : dad_id,
+        'mom'               : mom_id,
+        'dad_site_count'    : len(dad_informative_sites),
+        'mom_site_count'    : len(mom_informative_sites),
+        'dad_sites'         : ",".join(dad_informative_sites),
+        'mom_sites'         : ",".join(mom_informative_sites),
+        'evidence_type'     : "readbacked",
+        'dad_reads'         : dad_reads,
+        'mom_reads'         : mom_reads,
+        'dad_readnames'     : dad_readnames,
+        'mom_readnames'     : mom_readnames,
+        'cnv_dad_site_count': 0,
+        'cnv_mom_site_count': 0,
+        'cnv_dad_sites'     : '',
+        'cnv_mom_sites'     : "",
+        'cnv_evidence_type' : ""
+    }
+    key = [str(v) for v in region.values()]+[denovo['kid'], denovo['vartype']]
+    records["_".join(key)] = record
+
+def run_read_phasing(dnms, pedigrees, vcf, threads):
     #get informative sites near the breakpoints of SVs for reab-backed phasing
-    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 5000, whole_region=False)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 5000, threads, whole_region=False)
     records={}
-    for denovo in dnms_with_informative_sites:
+    if threads != 1:
+        executor = ThreadPoolExecutor(threads)
+        futures = []
 
-        region = {
-            "chrom" : denovo['chrom'],
-            "start" : denovo['start'],
-            "end" : denovo['end'],
-        }
+    for denovo in dnms_with_informative_sites:
+        dad_id = pedigrees[denovo['kid']]['dad']
+        mom_id = pedigrees[denovo['kid']]['mom']
+
         
         if "candidate_sites" not in denovo:
             continue
         informative_sites = denovo['candidate_sites']
 
-        if len(informative_sites) <= 0:
-            print("No usable informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
+        if 'candidate_sites' not in denovo or len(denovo['candidate_sites']) == 0:
+            print("No usable informative sites for variant {}:{}-{}".format(
+                denovo['chrom'], denovo['start'], denovo['end']), file=sys.stderr)
             continue
-
-        #these are reads that support the ref or alt allele of the de novo variant
-        dnm_reads = collect_reads_sv(denovo['bam'], region, denovo['het_sites'])
-        matches = match_informative_sites(dnm_reads, informative_sites)
-
-        if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
-            print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
-            continue
-
-        counts = phase_by_reads(matches)
-        dad_id = pedigrees[denovo['kid']]['dad']
-        mom_id = pedigrees[denovo['kid']]['mom']
-        
-        #did I put terary operators and list comprehension in the same lines? What's wrong with me?
-        dad_informative_sites = list(set([ str(c[1]) for c in counts[dad_id]])) if dad_id in counts else ["NA"]
-        dad_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")" for c in counts[dad_id]]))) if dad_id in counts else "NA"
-        dad_readnames = list(set([c[0].query_name for c in counts[dad_id]])) if dad_id in counts else False
-        mom_informative_sites = list(set([ str(c[1]) for c in counts[mom_id]])) if mom_id in counts else ["NA"]
-        mom_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")"for c in counts[mom_id]]))) if mom_id in counts else "NA"
-        mom_readnames = list(set([c[0].query_name for c in counts[mom_id]])) if mom_id in counts else False
-
-        record = {
-            'region'            : region,
-            'svtype'            : denovo['svtype'],
-            'kid'               : denovo['kid'],
-            'dad'               : dad_id,
-            'mom'               : mom_id,
-            'dad_site_count'    : len(dad_informative_sites),
-            'mom_site_count'    : len(mom_informative_sites),
-            'dad_sites'         : ",".join(dad_informative_sites),
-            'mom_sites'         : ",".join(mom_informative_sites),
-            'evidence_type'     : "readbacked",
-            'dad_reads'         : dad_reads,
-            'mom_reads'         : mom_reads,
-            'dad_readnames'     : dad_readnames,
-            'mom_readnames'     : mom_readnames,
-        }
-        key = list(region.values())+[denovo['kid'], denovo['svtype']]
-        records["_".join(key)] = record
+        if threads != 1:
+            futures.append(executor.submit(
+                multithread_read_phasing, 
+                denovo, 
+                records, 
+                dad_id, 
+                mom_id
+            ))
+        else:
+            multithread_read_phasing(denovo, records, dad_id, mom_id)
+    if threads != 1:
+        wait(futures)
     return records
 
+        
+    return records
 
-def run_cnv_phasing(dnms, pedigrees, vcf):
+def multithread_cnv_phasing(denovo, records, dad_id, mom_id):
+    region = {
+        "chrom" : denovo['chrom'],
+        "start" : denovo['start'],
+        "end" : denovo['end'],
+    }
+
+    origin_data = phase_by_snvs(denovo['candidate_sites'])
+    if not origin_data:
+        return
+
+    evidence_items = {
+        dad_id : ["NA"],
+        mom_id : ["NA"]
+    }
+    for parent in evidence_items:
+        if parent in origin_data and len(origin_data[parent]) > 0:
+            evidence_items[parent] = [str(o['pos']) for o in origin_data[parent]]
+    
+    record = {
+        'region'            : region,
+        'vartype'           : denovo['vartype'],
+        'kid'               : denovo['kid'],
+        'dad'               : dad_id,
+        'mom'               : mom_id,
+        'cnv_dad_site_count': len(evidence_items[dad_id]),
+        'cnv_mom_site_count': len(evidence_items[mom_id]),
+        'cnv_dad_sites'     : ",".join(evidence_items[dad_id]),
+        'cnv_mom_sites'     : ",".join(evidence_items[mom_id]),
+        'cnv_evidence_type' : "NON_READBACKED",
+        'dad_site_count'    : 0,
+        'mom_site_count'    : 0,
+        'dad_sites'         : "",
+        'mom_sites'         : "",
+        'evidence_type'     : "",
+        'dad_reads'         : [],
+        'mom_reads'         : [],
+        'dad_readnames'     : [],
+        'mom_readnames'     : []
+
+
+    }
+    key = [str(r) for r in region.values()]+[denovo['kid'], denovo['vartype']]
+    records["_".join(key)] = record
+
+def run_cnv_phasing(dnms, pedigrees, vcf, threads):
     """
     Specialized phasing for CNVs, using the informative sites from the region with a copy-number change
     """
     #get informative sites inside CNVs for purely SNV-based phasing
-    dnms_with_informative_sites = find(dnms, pedigrees, args.vcf, 0)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, threads)
     records = {}
+    if threads != 1:
+        executor = ThreadPoolExecutor(threads)
+        futures = []
+
     for denovo in dnms_with_informative_sites:
         dad_id = pedigrees[denovo['kid']]['dad']
         mom_id = pedigrees[denovo['kid']]['mom']
 
-        if denovo['svtype'] not in ['DEL','DUP']:
+        if denovo['vartype'] not in ['DEL','DUP']:
             continue
-
-        region = {
-            "chrom" : denovo['chrom'],
-            "start" : int(denovo['start']),
-            "end" : int(denovo['end']),
-        }
-
-        if 'candidate_sites' not in denovo:
+    
+        if 'candidate_sites' not in denovo or len(denovo['candidate_sites']) == 0:
+            print("No usable informative sites for variant {}:{}-{}".format(
+                denovo['chrom'], denovo['start'], denovo['end']), file=sys.stderr)
             continue
-        origin_data = phase_by_snvs(denovo['candidate_sites'])
-        evidence_items = {
-            dad_id : ["NA"],
-            mom_id : ["NA"]
-        }
-        if not origin_data:
-            continue
-        for parent in evidence_items:
-            if parent in origin_data and len(origin_data[parent]) > 0:
-                evidence_items[parent] = [str(o['pos']) for o in origin_data[parent]]
-
-        record = {
-            'region'            : region,
-            'svtype'            : denovo['svtype'],
-            'kid'               : denovo['kid'],
-            'dad'               : dad_id,
-            'mom'               : mom_id,
-            'dad_site_count'    : len(evidence_items[dad_id]),
-            'mom_site_count'    : len(evidence_items[mom_id]),
-            'dad_sites'         : ",".join(evidence_items[dad_id]),
-            'mom_sites'         : ",".join(evidence_items[mom_id]),
-            'evidence_type'     : "NON_READBACKED",
-            "origin_parent_reads":  "NA"
-
-        }
-        key = [str(r) for r in region.values()]+[denovo['kid'], denovo['svtype']]
-        records["_".join(key)] = record
+        if threads != 1:
+            futures.append(executor.submit(
+                multithread_cnv_phasing, 
+                denovo, 
+                records, 
+                dad_id, 
+                mom_id
+            ))
+        else:
+            multithread_cnv_phasing(denovo, records, dad_id, mom_id)
+    if threads != 1:
+        wait(futures)
     return records
 
 
-def phase_svs(args):
-    dnms,kids = parse_bed(args.dnms)
-    pedigrees = parse_ped(args.ped, kids)
-
-    header = [
-        "#chrom", 
-        "start",
-        "end",
-        "svtype",
-        "kid",
-        "origin_parent",
-        "other_parent",
-        "evidence_count",
-        "evidence_types",
-        "origin_parent_sites", 
-        "origin_parent_reads",
-        "other_parent_sites",
-        "other_parent_reads",
-    ]
-    print("\t".join(header))
-    template = "\t".join([
-        "{chrom}",
-        "{start}",
-        "{end}",
-        "{svtype}",
-        "{kid}",
-        "{origin_parent}",
-        "{other_parent}",
-        "{evidence_count}",
-        "{evidence_types}",
-        "{origin_parent_sites}",
-        "{origin_parent_reads}",
-        "{other_parent_sites}",
-        "{other_parent_reads}",
-
-    ])
-    cnv_records = run_cnv_phasing(dnms, pedigrees, args.vcf)
-    read_records = run_read_phasing(dnms, pedigrees, args.vcf)
-
-    #merge evidences
-    merged_records = []
+#def phase_svs(args):
+def phase_svs(dnms, kids, pedigrees, sites, threads):
+    cnv_records = run_cnv_phasing(dnms, pedigrees, sites, threads)
+    read_records = run_read_phasing(dnms, pedigrees, sites, threads)
     for key in cnv_records:
-        dad_count = cnv_records[key]['dad_site_count']
-        mom_count = cnv_records[key]['mom_site_count']
-        origin_parent = None
-        other_parent = None
-        origin_parent_sites = None
-        other_parent_sites = None
-        evidence_types = "NON_READBACKED"
-        if float(dad_count)/mom_count >= .95:
-            origin_parent = cnv_records[key]['dad']
-            other_parent = cnv_records[key]['mom']
-            origin_count = dad_count
-            origin_parent_sites = cnv_records[key]['dad_sites']
-            other_parent_sites = cnv_records[key]['mom_sites']
-        elif float(mom_count)/dad_count >= .95:
-            origin_parent = cnv_records[key]['mom']
-            other_parent = cnv_records[key]['dad']
-            origin_count = mom_count
-            origin_parent_sites = cnv_records[key]['mom_sites']
-            other_parent_sites = cnv_records[key]['dad_sites']
+        if key not in read_records:
+            read_records[key] = cnv_records[key]
         else:
-            origin_parent = cnv_records[key]['dad']+"|"+cnv_records[key]['mom']
-            origin_count = "{}|{}".format(dad_count, mom_count)
-            origin_parent_sites = cnv_records[key]['dad_sites']
-            other_parent_sites = cnv_records[key]['mom_sites']
+            read_records[key]['cnv_dad_site_count'] = cnv_records[key]['cnv_dad_site_count']
+            read_records[key]['cnv_mom_site_count'] = cnv_records[key]['cnv_mom_site_count']
+            read_records[key]['cnv_dad_sites'] = cnv_records[key]['cnv_dad_sites']
+            read_records[key]['cnv_mom_sites'] = cnv_records[key]['cnv_mom_sites']
+            read_records[key]['evidence_type'] += ","+cnv_records[key]['cnv_evidence_type']
+    return read_records
 
-        merged_record = {
-            'chrom'                 :cnv_records[key]['region']['chrom'],
-            'start'                 :int(cnv_records[key]['region']['start']),
-            'end'                   :int(cnv_records[key]['region']['end']),
-            'svtype'                :cnv_records[key]['svtype'],
-            'kid'                   :cnv_records[key]['kid'],
-            'origin_parent'         :origin_parent,
-            'other_parent'          :other_parent,
-            'evidence_count'        :str(origin_count),
-            'evidence_types'        :cnv_records[key]['evidence_type'],
-            'origin_parent_sites'   :origin_parent_sites,
-            'origin_parent_reads'   :"NA",
-            'other_parent_sites'    :other_parent_sites,
-            'other_parent_reads'    :"NA",
-        }
+#    dnms,kids = parse_bed(args.dnms)
+#    pedigrees = parse_ped(args.ped, kids)
+#
+#    header = [
+#        "#chrom", 
+#        "start",
+#        "end",
+#        "svtype",
+#        "kid",
+#        "origin_parent",
+#        "other_parent",
+#        "evidence_count",
+#        "evidence_types",
+#        "origin_parent_sites", 
+#        "origin_parent_reads",
+#        "other_parent_sites",
+#        "other_parent_reads",
+#    ]
+#    print("\t".join(header))
+#    template = "\t".join([
+#        "{chrom}",
+#        "{start}",
+#        "{end}",
+#        "{svtype}",
+#        "{kid}",
+#        "{origin_parent}",
+#        "{other_parent}",
+#        "{evidence_count}",
+#        "{evidence_types}",
+#        "{origin_parent_sites}",
+#        "{origin_parent_reads}",
+#        "{other_parent_sites}",
+#        "{other_parent_reads}",
+#
+#    ])
 
-        if key in read_records:
-            dad_read_count = len(read_records[key]['dad_readnames'])
-            mom_read_count = len(read_records[key]['mom_readnames'])
-            
-            #dad's the de novo origin
-            if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
-                merged_record['origin_parent'] = read_records[key]['dad']
-                merged_record['other_parent'] = read_records[key]['mom']
-                merged_record['evidence_count'] = str(merged_record['evidence_count'])+","+str(dad_read_count)
-                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
-                merged_record['origin_parent_reads'] = read_records[key]['dad_reads']
-                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
-                merged_record['other_parent_reads'] = read_records[key]['mom_reads']
-                merged_record['evidence_types'] += ",READBACKED"
-            #mom's the de novo origin
-            elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
-                merged_record['origin_parent'] = read_records[key]['mom']
-                merged_record['other_parent'] = read_records[key]['dad']
-                merged_record['evidence_count'] = str(merged_record['evidence_count'])+","+str(mom_read_count)
-                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
-                merged_record['origin_parent_reads'] = read_records[key]['mom_reads']
-                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
-                merged_record['other_parent_reads'] = read_records[key]['dad_reads']
-                merged_record['evidence_types'] += ",READBACKED"
-            #phasing failed
-            else:
-                merged_record['origin_parent'] = read_records[key]['dad']+"|"+read_records[key]['mom']
-                merged_record['evidence_count']  += ","+"{}|{}".format(dad_read_count, mom_read_count)
-                merged_record['evidence_types'] += ",AMBIGUOUS_READBACKED"
-                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
-                merged_record['origin_parent_reads'] = read_records[key]['dad_reads']
-                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
-                merged_record['other_parent_reads'] = read_records[key]['mom_reads']
-        merged_records.append(merged_record)
-
-
-    for key in read_records:
-        if key in cnv_records:
-            continue
-
-        dad_read_count = len(read_records[key]['dad_readnames'])
-        mom_read_count = len(read_records[key]['mom_readnames'])
-            
-        origin_parent_reads = "NA"
-        origin_parent = None
-        origin_parent_sites = None
-        evidence_count = 0
-        other_parent = None
-        other_parent_sites = None
-        other_parent_reads = "NA"
-        evidence_types = "READBACKED"
-        
-        if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
-            origin_parent = read_records[key]['dad']
-            other_parent = read_records[key]['mom']
-            evidence_count = dad_read_count
-            origin_parent_sites = read_records[key]['dad_sites']
-            origin_parent_reads = read_records[key]['dad_reads']
-            other_parent_sites = read_records[key]['mom_sites']
-            other_parent_reads = read_records[key]['mom_reads']
-        elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
-            origin_parent = read_records[key]['mom']
-            other_parent = read_records[key]['dad']
-            evidence_count = mom_read_count
-            origin_parent_sites = read_records[key]['mom_sites']
-            origin_parent_reads = read_records[key]['mom_reads']
-            other_parent_sites = read_records[key]['dad_sites']
-            other_parent_reads = read_records[key]['dad_reads']
-        else:
-            origin_parent = read_records[key]['dad']+"|"+read_records[key]['mom']
-            evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
-            origin_parent_sites = read_records[key]['dad_sites']
-            origin_parent_reads = read_records[key]['dad_reads']
-            other_parent_reads = read_records[key]['mom_reads']
-            other_parent_sites = read_records[key]['mom_sites']
-            evidence_types = "AMBIGUOUS_READBACKED"
-
-        merged_record = {
-            'chrom'                 :read_records[key]['region']['chrom'],
-            'start'                 :int(read_records[key]['region']['start']),
-            'end'                   :int(read_records[key]['region']['end']),
-            'svtype'                :read_records[key]['svtype'],
-            'kid'                   :read_records[key]['kid'],
-            'origin_parent'         :origin_parent,
-            'other_parent'          :other_parent,
-            'evidence_count'        :evidence_count,
-            'evidence_types'        :evidence_types,
-            'origin_parent_sites'   :origin_parent_sites,
-            'origin_parent_reads'   :origin_parent_reads,
-            'other_parent_sites'   :other_parent_sites,
-            'other_parent_reads'   :other_parent_reads,
-        }
-        merged_records.append(merged_record)
-    merged_records = sorted(merged_records, key = lambda x: (x['chrom'], x['start'], x['end']))
-    for mr in merged_records:
-        print(template.format(**mr))
+#    #merge evidences
+#    merged_records = []
+#    for key in cnv_records:
+#        dad_count = cnv_records[key]['dad_site_count']
+#        mom_count = cnv_records[key]['mom_site_count']
+#        origin_parent = None
+#        other_parent = None
+#        origin_parent_sites = None
+#        other_parent_sites = None
+#        evidence_types = "NON_READBACKED"
+#        if float(dad_count)/mom_count >= .95:
+#            origin_parent = cnv_records[key]['dad']
+#            other_parent = cnv_records[key]['mom']
+#            origin_count = dad_count
+#            origin_parent_sites = cnv_records[key]['dad_sites']
+#            other_parent_sites = cnv_records[key]['mom_sites']
+#        elif float(mom_count)/dad_count >= .95:
+#            origin_parent = cnv_records[key]['mom']
+#            other_parent = cnv_records[key]['dad']
+#            origin_count = mom_count
+#            origin_parent_sites = cnv_records[key]['mom_sites']
+#            other_parent_sites = cnv_records[key]['dad_sites']
+#        else:
+#            origin_parent = cnv_records[key]['dad']+"|"+cnv_records[key]['mom']
+#            origin_count = "{}|{}".format(dad_count, mom_count)
+#            origin_parent_sites = cnv_records[key]['dad_sites']
+#            other_parent_sites = cnv_records[key]['mom_sites']
+#
+#        merged_record = {
+#            'chrom'                 :cnv_records[key]['region']['chrom'],
+#            'start'                 :int(cnv_records[key]['region']['start']),
+#            'end'                   :int(cnv_records[key]['region']['end']),
+#            'svtype'                :cnv_records[key]['svtype'],
+#            'kid'                   :cnv_records[key]['kid'],
+#            'origin_parent'         :origin_parent,
+#            'other_parent'          :other_parent,
+#            'evidence_count'        :str(origin_count),
+#            'evidence_types'        :cnv_records[key]['evidence_type'],
+#            'origin_parent_sites'   :origin_parent_sites,
+#            'origin_parent_reads'   :"NA",
+#            'other_parent_sites'    :other_parent_sites,
+#            'other_parent_reads'    :"NA",
+#        }
+#
+#        if key in read_records:
+#            dad_read_count = len(read_records[key]['dad_readnames'])
+#            mom_read_count = len(read_records[key]['mom_readnames'])
+#            
+#            #dad's the de novo origin
+#            if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
+#                merged_record['origin_parent'] = read_records[key]['dad']
+#                merged_record['other_parent'] = read_records[key]['mom']
+#                merged_record['evidence_count'] = str(merged_record['evidence_count'])+","+str(dad_read_count)
+#                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
+#                merged_record['origin_parent_reads'] = read_records[key]['dad_reads']
+#                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
+#                merged_record['other_parent_reads'] = read_records[key]['mom_reads']
+#                merged_record['evidence_types'] += ",READBACKED"
+#            #mom's the de novo origin
+#            elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
+#                merged_record['origin_parent'] = read_records[key]['mom']
+#                merged_record['other_parent'] = read_records[key]['dad']
+#                merged_record['evidence_count'] = str(merged_record['evidence_count'])+","+str(mom_read_count)
+#                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
+#                merged_record['origin_parent_reads'] = read_records[key]['mom_reads']
+#                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
+#                merged_record['other_parent_reads'] = read_records[key]['dad_reads']
+#                merged_record['evidence_types'] += ",READBACKED"
+#            #phasing failed
+#            else:
+#                merged_record['origin_parent'] = read_records[key]['dad']+"|"+read_records[key]['mom']
+#                merged_record['evidence_count']  += ","+"{}|{}".format(dad_read_count, mom_read_count)
+#                merged_record['evidence_types'] += ",AMBIGUOUS_READBACKED"
+#                merged_record['origin_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['dad_sites']
+#                merged_record['origin_parent_reads'] = read_records[key]['dad_reads']
+#                merged_record['other_parent_sites'] = merged_record['origin_parent_sites']+","+read_records[key]['mom_sites']
+#                merged_record['other_parent_reads'] = read_records[key]['mom_reads']
+#        merged_records.append(merged_record)
+#
+#
+#    for key in read_records:
+#        if key in cnv_records:
+#            continue
+#
+#        dad_read_count = len(read_records[key]['dad_readnames'])
+#        mom_read_count = len(read_records[key]['mom_readnames'])
+#            
+#        origin_parent_reads = "NA"
+#        origin_parent = None
+#        origin_parent_sites = None
+#        evidence_count = 0
+#        other_parent = None
+#        other_parent_sites = None
+#        other_parent_reads = "NA"
+#        evidence_types = "READBACKED"
+#        
+#        if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
+#            origin_parent = read_records[key]['dad']
+#            other_parent = read_records[key]['mom']
+#            evidence_count = dad_read_count
+#            origin_parent_sites = read_records[key]['dad_sites']
+#            origin_parent_reads = read_records[key]['dad_reads']
+#            other_parent_sites = read_records[key]['mom_sites']
+#            other_parent_reads = read_records[key]['mom_reads']
+#        elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
+#            origin_parent = read_records[key]['mom']
+#            other_parent = read_records[key]['dad']
+#            evidence_count = mom_read_count
+#            origin_parent_sites = read_records[key]['mom_sites']
+#            origin_parent_reads = read_records[key]['mom_reads']
+#            other_parent_sites = read_records[key]['dad_sites']
+#            other_parent_reads = read_records[key]['dad_reads']
+#        else:
+#            origin_parent = read_records[key]['dad']+"|"+read_records[key]['mom']
+#            evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
+#            origin_parent_sites = read_records[key]['dad_sites']
+#            origin_parent_reads = read_records[key]['dad_reads']
+#            other_parent_reads = read_records[key]['mom_reads']
+#            other_parent_sites = read_records[key]['mom_sites']
+#            evidence_types = "AMBIGUOUS_READBACKED"
+#
+#        merged_record = {
+#            'chrom'                 :read_records[key]['region']['chrom'],
+#            'start'                 :int(read_records[key]['region']['start']),
+#            'end'                   :int(read_records[key]['region']['end']),
+#            'svtype'                :read_records[key]['svtype'],
+#            'kid'                   :read_records[key]['kid'],
+#            'origin_parent'         :origin_parent,
+#            'other_parent'          :other_parent,
+#            'evidence_count'        :evidence_count,
+#            'evidence_types'        :evidence_types,
+#            'origin_parent_sites'   :origin_parent_sites,
+#            'origin_parent_reads'   :origin_parent_reads,
+#            'other_parent_sites'   :other_parent_sites,
+#            'other_parent_reads'   :other_parent_reads,
+#        }
+#        merged_records.append(merged_record)
+#    merged_records = sorted(merged_records, key = lambda x: (x['chrom'], x['start'], x['end']))
+#    for mr in merged_records:
+#        print(template.format(**mr))
 
     
 

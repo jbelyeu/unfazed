@@ -112,58 +112,120 @@ def get_bam_names(bam_dir, bam_pairs):
 def parse_ped(ped, kids):
     labels = ["kid","dad", "mom","sex"]
     kid_entries = {}
+    missing_parents = []
     with open(ped, 'r') as pedfile:
         for line in pedfile:
             fields = line.strip().split()
             if fields[1] in kids:
+                if fields[2] == '0' or fields[3] == '0':
+                    print("Parent of sample {} missing from pedigree file, will be skipped".format(fields[1]), file=sys.stderr)
+                    missing_parents.append(fields[1])
+                    continue
                 kid_entries[fields[1]] = dict(zip(labels,fields[1:5]))
+
+    for sample in kids:
+        if (not sample in kid_entries) and (not sample in missing_parents):
+            print("{} missing from pedigree file, will be skipped".format(sample), file=sys.stderr)
     return kid_entries
 
 def summarize_record(read_record, include_ambiguous, verbose):
     dad_read_count = len(read_record['dad_readnames'])
     mom_read_count = len(read_record['mom_readnames'])
+
         
-    origin_parent_reads = "NA"
+    origin_parent_reads = []
     origin_parent = None
-    origin_parent_sites = None
+    origin_parent_sites = []
     evidence_count = 0
     other_parent = None
-    other_parent_sites = None
-    other_parent_reads = "NA"
-    evidence_types = "READBACKED"
-    
+    other_parent_sites = []
+    other_parent_reads = []
+    evidence_types = []
+        
+    #logic for readbacked phasing
     if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
         origin_parent = read_record['dad']
         other_parent = read_record['mom']
-        evidence_count = dad_read_count
+        evidence_count = len(read_record['dad_sites'])
         origin_parent_sites = read_record['dad_sites']
         origin_parent_reads = read_record['dad_reads']
         other_parent_sites = read_record['mom_sites']
         other_parent_reads = read_record['mom_reads']
+        evidence_types.append("READBACKED")
     elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
         origin_parent = read_record['mom']
         other_parent = read_record['dad']
-        evidence_count = mom_read_count
+        evidence_count = len(read_record['mom_sites'])
         origin_parent_sites = read_record['mom_sites']
         origin_parent_reads = read_record['mom_reads']
         other_parent_sites = read_record['dad_sites']
         other_parent_reads = read_record['dad_reads']
+        evidence_types.append("READBACKED")
     elif include_ambiguous:
         origin_parent = read_record['dad']+"|"+read_record['mom']
-        evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
+        evidence_count = dad_read_count + mom_read_count
         origin_parent_sites = read_record['dad_sites']
         origin_parent_reads = read_record['dad_reads']
         other_parent_reads = read_record['mom_reads']
         other_parent_sites = read_record['mom_sites']
         evidence_types = "AMBIGUOUS_READBACKED"
-    else:
-        return None
+
+    #logic for cnv phasing
+    dad_cnv_site_count = read_record['cnv_dad_site_count']
+    mom_cnv_site_count = read_record['cnv_mom_site_count']
+    if (dad_cnv_site_count > 0) and (dad_cnv_site_count >= 10*mom_cnv_site_count):
+        if origin_parent == read_record['mom']:
+            #this just became ambiguous because of contradictory results
+            origin_parent = none
+            evidence_count += dad_cnv_site_count + mom_cnv_site_count
+            origin_parent_sites += read_record['cnv_dad_sites']
+            other_parent_sites = read_record['cnv_mom_sites']
+            evidence_types = ["AMBIGUOUS_BOTH"]
+        else:
+            #dad is origin 
+            origin_parent = read_record['dad']
+            other_parent = read_record['mom']
+            evidence_count = read_record['cnv_dad_site_count']
+            origin_parent_sites += read_record['cnv_dad_sites']
+            origin_parent_reads += read_record['dad_reads']
+            other_parent_sites = read_record['mom_sites']
+            other_parent_reads = read_record['mom_reads']
+            evidence_types.append("NONREADBACKED")
+
+    elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10*dad_cnv_site_count):
+        if origin_parent == read_record['dad']:
+            #this just became ambiguous because of contradictory results
+            origin_parent = None
+            evidence_count += dad_cnv_site_count + mom_cnv_site_count
+            origin_parent_sites += read_record['cnv_dad_sites']
+            other_parent_sites = read_record['cnv_mom_sites']
+            evidence_types = ["AMBIGUOUS_BOTH"]
+        else:
+            #mom is origin 
+            origin_parent = read_record['mom']
+            other_parent = read_record['dad']
+            evidence_count = read_record['cnv_mom_site_count']
+            origin_parent_sites += read_record['cnv_mom_sites']
+            origin_parent_reads += read_record['mom_reads']
+            other_parent_sites = read_record['dad_sites']
+            other_parent_reads = read_record['dad_reads']
+            evidence_types.append("NONREADBACKED")
+    elif include_ambiguous:
+        #this just became ambiguous because of contradictory results
+        origin_parent = None
+        evidence_count += dad_cnv_site_count + mom_cnv_site_count
+        origin_parent_sites += read_record['cnv_dad_sites']
+        other_parent_sites = read_record['cnv_mom_sites']
+        evidence_types.append("AMBIGUOUS_NONREADBACKED")
+
+    if origin_parent is None and not include_ambiguous:
+        return
 
     merged_record = {
         'chrom'                 :read_record['region']['chrom'],
         'start'                 :int(read_record['region']['start']),
         'end'                   :int(read_record['region']['end']),
-        'vartype'              :read_record['vartype'],
+        'vartype'               :read_record['vartype'],
         'kid'                   :read_record['kid'],
         'origin_parent'         :origin_parent,
         'other_parent'          :other_parent,
@@ -178,12 +240,12 @@ def summarize_record(read_record, include_ambiguous, verbose):
     return merged_record
 
 
-def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose):
+def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outfile):
     vcf = VCF(in_vcf_name)
     vcf.add_format_to_header({"ID": "UOP", "Description": "Unfazed-identified origin parent. Paternal:`0`, maternal:`1`, missing:`-1`","Type":'Float', 'Number':'1'})
     vcf.add_format_to_header({"ID": "UOPS", "Description": "Count of pieces of evidence supporing the unfazed-identified origin parent or `-1` if missing","Type":'Float', 'Number':'1'})
-    vcf.add_format_to_header({"ID": "UET", "Description": "Unfazed evidence type: `0` (readbacked), `1` (non-readbacked, for CNVs only), 2 (both), or `-1` (missing)","Type":'Float', 'Number':'1'})
-    writer = Writer("/dev/stdout", vcf)
+    vcf.add_format_to_header({"ID": "UET", "Description": "Unfazed evidence type: `0` (readbacked), `1` (non-readbacked, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous non-readbacked), `5` (ambiguous both) or `-1` (missing)","Type":'Float', 'Number':'1'})
+    writer = Writer(outfile, vcf)
     
 
     sample_dict = dict(zip(vcf.samples, range(len(vcf.samples))))
@@ -221,8 +283,14 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose):
 
                         uops_entry = record_summary['evidence_count']
 
-                        evidence_types = record_summary['evidence_types'].split(',')
+                        evidence_types = record_summary['evidence_types']
                         uet_entry = -1
+                        if "AMBIGUOUS_READBACKED" in evidence_types:
+                            uet_entry = 3
+                        elif "AMBIGUOUS_NONREADBACKED" in evidence_types:
+                            uet_entry = 4
+                        elif "AMBIGUOUS_BOTH" in evidence_types:
+                            uet_entry = 5
                         if "READBACKED" in evidence_types and "NON_READBACKED" in evidence_types:
                             uet_entry = 2
                         elif "READBACKED" in evidence_types:
@@ -241,7 +309,7 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose):
         writer.write_record(variant)
 
 
-def write_bed_output(read_records, include_ambiguous, verbose):
+def write_bed_output(read_records, include_ambiguous, verbose, outfile):
     header = [
         "#chrom", 
         "start",
@@ -291,8 +359,15 @@ def write_bed_output(read_records, include_ambiguous, verbose):
             record_summaries.append(record_summary)
     
     record_summaries = sorted(record_summaries, key = lambda x: (x['chrom'], x['start'], x['end']))
-    for mr in record_summaries:
-        print(template.format(**mr))
+    if outfile == "/dev/stdout":
+        for record_summary in record_summaries:
+            record_summary['evidence_types'] = ",".join(record_summary['evidence_types'])
+            print(template.format(**record_summary))
+    else:
+        with open(outfile) as outfile_fh:
+            for record_summary in record_summaries:
+                record_summary['evidence_types'] = ",".join(record_summary['evidence_types'])
+                print(template.format(**record_summary), file=outfile_fh)
 
 
 def unfazed(args):
@@ -323,16 +398,23 @@ def unfazed(args):
         sys.exit(1)
 
 
-    kids = []
+    kids = set()
+    missing_samples = set()
+    duplicated_samples = set()
     for var_fields in reader(args.dnms):
         sample = var_fields["kid"]
-        kids.append(sample)
         if not sample in bam_names_dict:
-            print("missing alignment file for", sample, file=sys.stderr)
+            if not(sample in missing_samples):
+                print("missing alignment file for", sample, file=sys.stderr)
+                missing_samples.add(sample)
             continue
-        elif len(bam_names_dict[sample]) != 1:
-            print("multiple alignment files for", sample+".", 
+        elif len(bam_names_dict[sample]) != 1: 
+            if not (sample in duplicated_samples):
+                print("multiple alignment files for", sample+".", 
                     "Please specify correct alignment file using --bam-pairs", file=sys.stderr)
+                duplicated_samples.add(sample)
+            continue
+        kids.add(sample)
         bam = list(bam_names_dict[sample])[0]
         var_fields['bam'] = bam
 
@@ -340,18 +422,35 @@ def unfazed(args):
             svs.append(var_fields)
         elif var_fields['vartype'] == SNV_TYPE:
             snvs.append(var_fields)
+    
     pedigrees = parse_ped(args.ped, kids)
+    kids = list(pedigrees.keys())
+
+    filtered_snvs = []
+    for snv in snvs:
+        if snv['kid'] in kids:
+            filtered_snvs.append(snv)
+    snvs = filtered_snvs
+    filtered_svs = []
+    for sv in svs:
+        if sv['kid'] in kids:
+            filtered_svs.append(sv)
+    svs = filtered_svs
+
     phased_svs = {}
     phased_snvs = {}
 
+    if (len(snvs) + len(svs)) == 0:
+        sys.exit("No phaseable variants")
     if len(svs) > 0:
         phased_svs = phase_svs(svs, kids, pedigrees, args.sites, args.threads)
     if len(snvs) > 0:
         phased_snvs = phase_snvs(snvs, kids, pedigrees,args.sites, args.threads)
 
+
     all_phased = {**phased_snvs, **phased_svs}
 
     if output_type == "vcf":
-        write_vcf_output(args.dnms, all_phased, args.include_ambiguous, args.verbose)
+        write_vcf_output(args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile)
     elif output_type == "bed":
-        write_bed_output(all_phased, args.include_ambiguous, args.verbose)
+        write_bed_output(all_phased, args.include_ambiguous, args.verbose, args.outfile)

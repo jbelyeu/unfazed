@@ -15,14 +15,14 @@ def setup_args():
     parser.add_argument(
         "-v",
         "--version",
-        help="Installed version",
+        help="Installed version ({})".format(__version__),
         action="version",
         version="%(prog)s " + str(__version__),
     )
     parser.add_argument(
         "-d", 
         "--dnms", 
-        help="BED file of the DNMs of interest,with chrom, start, end, kid_id, bam_location, var_type",
+        help="valid VCF OR BED file of the DNMs of interest> If BED, must contain chrom, start, end, kid_id, var_type columns",
         required=True)
 
     parser.add_argument(
@@ -78,10 +78,17 @@ def setup_args():
         action="store_true",
         default=False)
 
+    parser.add_argument(
+        "--outfile",
+        help="name for output file. Defaults to stdout", 
+        default="/dev/stdout")
+
+
     return parser
 
 
 def main():
+    print("\nUNFAZED v{}".format(__version__), file=sys.stderr)
     parser = setup_args()
     args = parser.parse_args()
     if args.bam_dir is None and args.bam_pairs is None:

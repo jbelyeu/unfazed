@@ -164,7 +164,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
 
     record = {
         'region'            : region,
-        'vartype'          : denovo['vartype'],
+        'vartype'           : denovo['vartype'],
         'kid'               : denovo['kid'],
         'dad'               : dad_id,
         'mom'               : mom_id,
@@ -177,6 +177,11 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
         'mom_reads'         : mom_reads,
         'dad_readnames'     : dad_readnames,
         'mom_readnames'     : mom_readnames,
+        'cnv_dad_site_count': 0,
+        'cnv_mom_site_count': 0,
+        'cnv_dad_sites'     : '',
+        'cnv_mom_sites'     : "",
+        'cnv_evidence_type' : ""
     }
     key = [str(v) for v in region.values()]+[denovo['kid'], denovo['vartype']]
     records["_".join(key)] = record
@@ -198,6 +203,7 @@ def run_read_phasing(dnms, pedigrees, vcf, threads):
             print("No usable informative sites for variant {}:{}-{}".format(
                 denovo['chrom'], denovo['start'], denovo['end']), file=sys.stderr)
             continue
+
         if threads != 1:
             futures.append(executor.submit(
                 multithread_read_phasing, 

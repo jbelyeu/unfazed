@@ -81,7 +81,7 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals,
 
 def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
     kid_allele = None
-    if ((denovo['svtype'] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4):
+    if ((denovo['vartype'] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4):
         #large deletions can be genotyped by hemizygous inheritance of informative alleles
         if (genotypes[kid_idx] == HOM_ALT):
             kid_allele = 'ref_parent'   
@@ -90,7 +90,7 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
         else:
             #het kid, variant unusable
             return
-    elif ((denovo['svtype'] == "DUP") 
+    elif ((denovo['vartype'] == "DUP") 
             and (ref_depths[kid_idx] > 2)
             and (alt_depths[kid_idx] > 2)
             and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 10):
@@ -137,7 +137,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
         missing = False
         for sample_id in [kid_id,dad_id,mom_id]:
             if sample_id not in sample_dict:
-                print("{} missing from SNV bcf")
+                print("{} missing from SNV vcf/bcf", file=sys.stderr)
                 missing = True
         if missing:
             continue
@@ -183,7 +183,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
                 })
 
 
-            if whole_region and ('svtype' in denovo):
+            if whole_region and ('vartype' in denovo):
                 candidate['kid_allele'] = get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx)
                 if not candidate['kid_allele']:
                     continue
@@ -299,7 +299,7 @@ def get_family_indexes(kid, pedigrees,sample_dict):
     missing = False
     for sample_id in [kid,dad_id,mom_id]:
         if sample_id not in sample_dict:
-            print("{} missing from SNV bcf")
+            print("{} missing from SNV bcf", file=sys.stderr)
             missing = True
     if missing:
         return None,None,None
@@ -350,7 +350,7 @@ def add_good_candidate_variant(variant, vars_by_sample, dn_key, pedigrees, whole
             })
 
 
-        if whole_region and ('svtype' in denovo):
+        if whole_region and ('vartype' in denovo):
             candidate['kid_allele'] = get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx)
             if not candidate['kid_allele']:
                 continue
