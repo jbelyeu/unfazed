@@ -37,7 +37,6 @@ jobs:
       - *setup_p2
       - *install_unfazed 
       - *run_func_tests
-      - *run_unit_tests
   test-linux-python3:
     <<: *linux
     steps:
@@ -45,7 +44,6 @@ jobs:
       - *setup_p3
       - *install_unfazed 
       - *run_func_tests
-      - *run_unit_tests
   test-macos-python2:
     <<: *macos
     steps:
@@ -53,7 +51,6 @@ jobs:
       - *setup_p2
       - *install_unfazed 
       - *run_func_tests
-      - *run_unit_tests
   test-macos-python3:
     <<: *macos
     steps:
@@ -61,18 +58,17 @@ jobs:
       - *setup_p3
       - *install_unfazed
       - *run_func_tests
-      - *run_unit_tests
 
 
 workflows:
   version: 2
-  unfazed-unit-tests:
+  unfazed-func-tests:
     jobs:
       - test-linux-python2
       - test-linux-python3
       - test-macos-python2
       - test-macos-python3
-  unfazed-nightly-unit-tests:
+  unfazed-nightly-func-tests:
     triggers:
       - schedule:
           cron: "0 0 * * *"
