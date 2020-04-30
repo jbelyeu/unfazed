@@ -18,7 +18,7 @@ Copy-number variants allow an additional method of phasing, wherein potential he
 * In a duplication, the allele balance of the de novo CNV's origin parent should be about double in proportion to the allele from the other parent.
 
 ## How to use it 
-Unfazed is available for install from conda
+Unfazed is available for install from conda. You must have or install at least Python 3.5.
 
 `conda install unfazed `
 
