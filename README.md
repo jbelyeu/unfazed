@@ -1,7 +1,7 @@
 [![CircleCI](https://circleci.com/gh/jbelyeu/unfazed/tree/master.svg?style=svg)](https://circleci.com/gh/jbelyeu/unfazed/tree/master)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/unfazed/README.html)
 
-# Unfazed: phasing tool for both SNVs and SVs
+# Unfazed: phasing tool for de novo SNVs and SVs
 Unfazed identifies the parent of origin for de novo variants, accepting input from either a vcf file or bed file of variant information. Unfazed works for point mutations (SNVs and INDELs) as well as larger structural mutations.
 
 ## How it works
