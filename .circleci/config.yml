@@ -6,11 +6,17 @@ variables:
       shell: /bin/bash
       name: Setup Unfazed python3 dependencies
       command: bash .circleci/setup.sh 3
-  run_func_tests: &run_func_tests
+  run_snv_func_tests: &run_snv_func_tests
     run:
       shell: /bin/bash
       name: Functional Tests for Unfazed
-      command: bash test/func/unfazed_test.sh
+      command: bash test/func/unfazed_snv_test.sh
+      no_output_timeout: 1h 
+  run_sv_func_tests: &run_sv_func_tests
+    run:
+      shell: /bin/bash
+      name: Functional Tests for Unfazed
+      command: bash test/func/unfazed_sv_test.sh
       no_output_timeout: 1h 
   macos: &macos
     macos:
@@ -31,14 +37,16 @@ jobs:
       - checkout
       - *setup_p3
       - *install_unfazed 
-      - *run_func_tests
+      - *run_snv_func_tests
+      - *run_sv_func_tests
   test-macos-python3:
     <<: *macos
     steps:
       - checkout
       - *setup_p3
       - *install_unfazed
-      - *run_func_tests
+      - *run_snv_func_tests
+      - *run_sv_func_tests
 
 
 workflows:
