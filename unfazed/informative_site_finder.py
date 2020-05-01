@@ -229,7 +229,6 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
         denovo['candidate_sites'] = sorted(candidate_sites, key=lambda x: x['pos'])
         denovo['het_sites'] = sorted(het_sites, key=lambda x: x['pos'])
         dnms[i] = denovo
-
     return dnms
 
 def create_lookups(dnms):

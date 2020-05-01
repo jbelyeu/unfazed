@@ -130,50 +130,50 @@ def parse_ped(ped, kids):
     return kid_entries
 
 def summarize_record(read_record, include_ambiguous, verbose):
-    dad_read_count = len(read_record['dad_readnames'])
-    mom_read_count = len(read_record['mom_readnames'])
-
-        
-    origin_parent_reads = []
+    dad_read_count = len(read_record['dad_reads'])
+    mom_read_count = len(read_record['mom_reads'])
     origin_parent = None
     origin_parent_sites = []
+    origin_parent_reads = []
     evidence_count = 0
     other_parent = None
     other_parent_sites = []
     other_parent_reads = []
     evidence_types = []
+    ambig = False
         
     #logic for readbacked phasing
     if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
         origin_parent = read_record['dad']
         other_parent = read_record['mom']
         evidence_count = len(read_record['dad_sites'])
-        origin_parent_sites = read_record['dad_sites']
-        origin_parent_reads = read_record['dad_reads']
-        other_parent_sites = read_record['mom_sites']
-        other_parent_reads = read_record['mom_reads']
+        origin_parent_sites += read_record['dad_sites']
+        origin_parent_reads += read_record['dad_reads']
+        other_parent_sites += read_record['mom_sites']
+        other_parent_reads += read_record['mom_reads']
         evidence_types.append("READBACKED")
     elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
         origin_parent = read_record['mom']
         other_parent = read_record['dad']
         evidence_count = len(read_record['mom_sites'])
-        origin_parent_sites = read_record['mom_sites']
-        origin_parent_reads = read_record['mom_reads']
-        other_parent_sites = read_record['dad_sites']
-        other_parent_reads = read_record['dad_reads']
+        origin_parent_sites += read_record['mom_sites']
+        origin_parent_reads += read_record['mom_reads']
+        other_parent_sites += read_record['dad_sites']
+        other_parent_reads += read_record['dad_reads']
         evidence_types.append("READBACKED")
-    elif include_ambiguous:
+    else:
         origin_parent = read_record['dad']+"|"+read_record['mom']
         evidence_count = dad_read_count + mom_read_count
-        origin_parent_sites = read_record['dad_sites']
-        origin_parent_reads = read_record['dad_reads']
-        other_parent_reads = read_record['mom_reads']
-        other_parent_sites = read_record['mom_sites']
-        evidence_types = "AMBIGUOUS_READBACKED"
+        origin_parent_sites += read_record['dad_sites']
+        origin_parent_reads += read_record['dad_reads']
+        other_parent_sites += read_record['mom_sites']
+        other_parent_reads += read_record['mom_reads']
+        evidence_types.append("AMBIGUOUS_READBACKED")
+        ambig = True
 
     #logic for cnv phasing
-    dad_cnv_site_count = read_record['cnv_dad_site_count']
-    mom_cnv_site_count = read_record['cnv_mom_site_count']
+    dad_cnv_site_count = len(read_record['cnv_dad_sites'])
+    mom_cnv_site_count = len(read_record['cnv_mom_sites'])
     if (dad_cnv_site_count > 0) and (dad_cnv_site_count >= 10*mom_cnv_site_count):
         if origin_parent == read_record['mom']:
             #this just became ambiguous because of contradictory results
@@ -182,16 +182,17 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent_sites += read_record['cnv_dad_sites']
             other_parent_sites = read_record['cnv_mom_sites']
             evidence_types = ["AMBIGUOUS_BOTH"]
+            ambig = True
         else:
             #dad is origin 
             origin_parent = read_record['dad']
             other_parent = read_record['mom']
-            evidence_count = read_record['cnv_dad_site_count']
+            evidence_count = dad_cnv_site_count
             origin_parent_sites += read_record['cnv_dad_sites']
             origin_parent_reads += read_record['dad_reads']
-            other_parent_sites = read_record['mom_sites']
-            other_parent_reads = read_record['mom_reads']
-            evidence_types.append("NONREADBACKED")
+            other_parent_sites += read_record['mom_sites']
+            other_parent_reads += read_record['mom_reads']
+            evidence_types.append("ALLELE-BALANCE")
 
     elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10*dad_cnv_site_count):
         if origin_parent == read_record['dad']:
@@ -199,39 +200,49 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent = None
             evidence_count += dad_cnv_site_count + mom_cnv_site_count
             origin_parent_sites += read_record['cnv_dad_sites']
-            other_parent_sites = read_record['cnv_mom_sites']
+            other_parent_sites += read_record['cnv_mom_sites']
             evidence_types = ["AMBIGUOUS_BOTH"]
+            ambig = True
         else:
             #mom is origin 
             origin_parent = read_record['mom']
             other_parent = read_record['dad']
-            evidence_count = read_record['cnv_mom_site_count']
+            evidence_count = mom_cnv_site_count
             origin_parent_sites += read_record['cnv_mom_sites']
             origin_parent_reads += read_record['mom_reads']
-            other_parent_sites = read_record['dad_sites']
-            other_parent_reads = read_record['dad_reads']
-            evidence_types.append("NONREADBACKED")
-    elif include_ambiguous:
+            other_parent_sites += read_record['dad_sites']
+            other_parent_reads += read_record['dad_reads']
+            evidence_types.append("ALLELE-BALANCE")
+    elif (dad_cnv_site_count + mom_cnv_site_count) > 0:
         #this just became ambiguous because of contradictory results
         origin_parent = None
         evidence_count += dad_cnv_site_count + mom_cnv_site_count
+        print("cnv site counts",dad_cnv_site_count, mom_cnv_site_count)
         origin_parent_sites += read_record['cnv_dad_sites']
         other_parent_sites = read_record['cnv_mom_sites']
-        evidence_types.append("AMBIGUOUS_NONREADBACKED")
-
-    if origin_parent is None and not include_ambiguous:
+        evidence_types.append("AMBIGUOUS_ALLELE-BALANCE")
+        ambig = True
+    
+    if (origin_parent is None or ambig)and not include_ambiguous:
         return
+    origin_parent_sites = sorted(origin_parent_sites)
+    other_parent_sites = sorted(other_parent_sites)
 
+    origin_parent_sites = ",".join(origin_parent_sites) if len(origin_parent_sites) > 0 else '-'
+    origin_parent_reads = ",".join(origin_parent_reads) if len(origin_parent_reads) > 0 else '-'
+    other_parent_sites = ",".join(other_parent_sites) if len(other_parent_sites) > 0 else '-'
+    other_parent_reads = ",".join(other_parent_reads) if len(other_parent_reads) > 0 else '-'
+    
     merged_record = {
-        'chrom'                 :read_record['region']['chrom'],
-        'start'                 :int(read_record['region']['start']),
-        'end'                   :int(read_record['region']['end']),
-        'vartype'               :read_record['vartype'],
-        'kid'                   :read_record['kid'],
-        'origin_parent'         :origin_parent,
-        'other_parent'          :other_parent,
-        'evidence_count'        :evidence_count,
-        'evidence_types'        :evidence_types,
+        'chrom'         :read_record['region']['chrom'],
+        'start'         :int(read_record['region']['start']),
+        'end'           :int(read_record['region']['end']),
+        'vartype'       :read_record['vartype'],
+        'kid'           :read_record['kid'],
+        'origin_parent' :origin_parent,
+        'other_parent'  :other_parent,
+        'evidence_count':evidence_count,
+        'evidence_types':evidence_types,
     }
     if verbose:
         merged_record['origin_parent_sites'] = origin_parent_sites
@@ -245,7 +256,7 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
     vcf = VCF(in_vcf_name)
     vcf.add_format_to_header({"ID": "UOP", "Description": "Unfazed-identified origin parent. Paternal:`0`, maternal:`1`, missing:`-1`","Type":'Float', 'Number':'1'})
     vcf.add_format_to_header({"ID": "UOPS", "Description": "Count of pieces of evidence supporing the unfazed-identified origin parent or `-1` if missing","Type":'Float', 'Number':'1'})
-    vcf.add_format_to_header({"ID": "UET", "Description": "Unfazed evidence type: `0` (readbacked), `1` (non-readbacked, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous non-readbacked), `5` (ambiguous both) or `-1` (missing)","Type":'Float', 'Number':'1'})
+    vcf.add_format_to_header({"ID": "UET", "Description": "Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both) or `-1` (missing)","Type":'Float', 'Number':'1'})
     writer = Writer(outfile, vcf)
     
 
@@ -288,15 +299,15 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
                         uet_entry = -1
                         if "AMBIGUOUS_READBACKED" in evidence_types:
                             uet_entry = 3
-                        elif "AMBIGUOUS_NONREADBACKED" in evidence_types:
+                        elif "AMBIGUOUS_ALLELE-BALANCE" in evidence_types:
                             uet_entry = 4
                         elif "AMBIGUOUS_BOTH" in evidence_types:
                             uet_entry = 5
-                        if "READBACKED" in evidence_types and "NON_READBACKED" in evidence_types:
+                        if "READBACKED" in evidence_types and "ALLELE-BALANCE" in evidence_types:
                             uet_entry = 2
                         elif "READBACKED" in evidence_types:
                             uet_entry = 0
-                        elif "NON_READBACKED" in evidence_types:
+                        elif "ALLELE-BALANCE" in evidence_types:
                             uet_entry = 1
 
             uop.append(uop_entry)
@@ -323,17 +334,7 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
         "evidence_types"
     ]
 
-    if verbose:
-        header += [
-            "origin_parent_sites", 
-            "origin_parent_reads",
-            "other_parent_sites",
-            "other_parent_reads"
-        ]
-
-
-    print("\t".join(header))
-    template = "\t".join([
+    template_fields = [
         "{chrom}",
         "{start}",
         "{end}",
@@ -343,19 +344,31 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
         "{other_parent}",
         "{evidence_count}",
         "{evidence_types}"
-    ])
+    ]
 
     if verbose:
-        template += "".join([
-        "{origin_parent_sites}",
-        "{origin_parent_reads}",
-        "{other_parent_sites}",
-        "{other_parent_reads}"
-    ])
+        header += [
+            "origin_parent_sites", 
+            "origin_parent_reads",
+            "other_parent_sites",
+            "other_parent_reads"
+        ]
+
+        template_fields += [
+            "{origin_parent_sites}",
+            "{origin_parent_reads}",
+            "{other_parent_sites}",
+            "{other_parent_reads}"
+        ]
+
+
+    print("\t".join(header))
+    template = "\t".join(template_fields)
     record_summaries = []
 
     for key in read_records:
         record_summary = summarize_record(read_records[key], include_ambiguous, verbose)
+
         if record_summary is not None:
             record_summaries.append(record_summary)
     

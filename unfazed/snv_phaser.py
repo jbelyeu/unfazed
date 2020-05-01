@@ -15,55 +15,6 @@ MILLION=1000000
 MIN_MAPQ=1
 STDEV_COUNT=3
 
-#def setup_args():
-#    parser = argparse.ArgumentParser(description="")
-#    parser.add_argument(
-#        "-d", 
-#        "--dnms", 
-#        help="bed file of the DNMs of interest,with chrom, start, end, kid_id, bam_location, vartype",
-#        #default="/Users/jon/Research/scripts/de_novo_sv/unfazed/snvs.bed")
-#        default="/Users/jon/Research/scripts/de_novo_sv/unfazed/8346.bed")
-#
-#    parser.add_argument(
-#        "-v", 
-#        "--vcf", 
-#        help="sorted/bgzipped/indexed vcf/bcf file of SNVs to identify informative sites. Must contain each kid and both parents",
-#        #default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/snv/hg38/18-01-23_WashU-Yandell-CEPH_Sent.Final_1552990128.vcf.gz")
-#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/ceph_37.vcf.gz")
-#
-#    parser.add_argument(
-#        "-p", 
-#        "--ped", 
-#        help="ped file including the kid and both parent IDs", 
-#        type=str, 
-#        default="/Users/jon/Research/scripts/de_novo_sv/ceph_denovos/data/16-08-06_WashU-Yandell-CEPH.ped")
-#    
-#    parser.add_argument(
-#        "-t", 
-#        "--threads", 
-#        help="number of threads to use", 
-#        type=int, 
-#        default=2)
-#
-#    return parser.parse_args()
-
-#def parse_bed(bed):
-#    labels = ["chrom","start", "end","kid", "bam","vartype"]
-#    kids = []
-#    dnms = []
-#    with open(bed, 'r') as bedfile:
-#        for line in bedfile:
-#            if line[0] == '#': continue
-#            #TODO add formatting checks to make sure all the necessary fields are present
-#            dnms.append(dict(zip(labels,line.strip().split()[:6])))
-#            try:
-#                dnms[-1][0] = int(dnms[-1][0])
-#            except KeyError:
-#                pass
-#            kids.append(dnms[-1]['kid'])
-#    return dnms, kids
-
-
 def phase_by_reads(matches):
     #parent_ids -> list of informative site matches
     origin_parent_data = {}
@@ -152,15 +103,25 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     if len(matches['alt']) <= 0 and len(matches['ref']) <= 0:
         print("No reads overlap informative sites for variant {chrom}:{start}-{end}".format(**region), file=sys.stderr)
         return
-    counts = phase_by_reads(matches)
     
-    #did I put ternary operators and list comprehension in the same lines? What's wrong with me?
-    dad_informative_sites = list(set([ str(c[1]) for c in counts[dad_id]])) if dad_id in counts else ["NA"]
-    dad_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")" for c in counts[dad_id]]))) if dad_id in counts else "NA"
-    dad_readnames = list(set([c[0].query_name for c in counts[dad_id]])) if dad_id in counts else False
-    mom_informative_sites = list(set([ str(c[1]) for c in counts[mom_id]])) if mom_id in counts else ["NA"]
-    mom_reads = ",".join(list(set([c[0].query_name+"("+str(c[0].reference_end)+")"for c in counts[mom_id]]))) if mom_id in counts else "NA"
-    mom_readnames = list(set([c[0].query_name for c in counts[mom_id]])) if mom_id in counts else False
+    counts = phase_by_reads(matches)
+    if dad_id in counts:
+        dad_informative_sites = [str(c[1]) for c in counts[dad_id]]
+        dad_informative_sites = list(set(dad_informative_sites))
+        dad_reads = [c[0].query_name for c in counts[dad_id]]
+        dad_reads = list(set(dad_reads))
+    else:
+        dad_informative_sites = []
+        dad_reads = []
+    
+    if mom_id in counts:
+        mom_informative_sites = [str(c[1]) for c in counts[mom_id]]
+        mom_informative_sites = list(set(mom_informative_sites))
+        mom_reads = [c[0].query_name for c in counts[mom_id]]
+        mom_reads = list(set(mom_reads))
+    else:
+        mom_informative_sites = []
+        mom_reads = []
 
     record = {
         'region'            : region,
@@ -168,17 +129,11 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
         'kid'               : denovo['kid'],
         'dad'               : dad_id,
         'mom'               : mom_id,
-        'dad_site_count'    : len(dad_informative_sites),
-        'mom_site_count'    : len(mom_informative_sites),
-        'dad_sites'         : ",".join(dad_informative_sites),
-        'mom_sites'         : ",".join(mom_informative_sites),
+        'dad_sites'         : dad_informative_sites,
+        'mom_sites'         : mom_informative_sites,
         'evidence_type'     : "readbacked",
         'dad_reads'         : dad_reads,
         'mom_reads'         : mom_reads,
-        'dad_readnames'     : dad_readnames,
-        'mom_readnames'     : mom_readnames,
-        'cnv_dad_site_count': 0,
-        'cnv_mom_site_count': 0,
         'cnv_dad_sites'     : '',
         'cnv_mom_sites'     : "",
         'cnv_evidence_type' : ""
@@ -224,103 +179,4 @@ def run_read_phasing(dnms, pedigrees, vcf, threads):
 #def phase_snvs(args):
 def phase_snvs(dnms, kids, pedigrees, sites, threads):
     return run_read_phasing(dnms, pedigrees, sites, threads)
-    #dnms,kids = parse_bed(args.dnms)
-    #pedigrees = parse_ped(args.ped, kids)
 
-#    header = [
-#        "#chrom", 
-#        "start",
-#        "end",
-#        "vartype",
-#        "kid",
-#        "origin_parent",
-#        "other_parent",
-#        "evidence_count",
-#        "evidence_types",
-#        "origin_parent_sites", 
-#        "origin_parent_reads",
-#        "other_parent_sites",
-#        "other_parent_reads",
-#    ]
-#    print("\t".join(header))
-#    template = "\t".join([
-#        "{chrom}",
-#        "{start}",
-#        "{end}",
-#        "{vartype}",
-#        "{kid}",
-#        "{origin_parent}",
-#        "{other_parent}",
-#        "{evidence_count}",
-#        "{evidence_types}",
-#        "{origin_parent_sites}",
-#        "{origin_parent_reads}",
-#        "{other_parent_sites}",
-#        "{other_parent_reads}",
-#
-#    ])
-#    merged_records = []
-#
-#    for key in read_records:
-#        dad_read_count = len(read_records[key]['dad_readnames'])
-#        mom_read_count = len(read_records[key]['mom_readnames'])
-#            
-#        origin_parent_reads = "NA"
-#        origin_parent = None
-#        origin_parent_sites = None
-#        evidence_count = 0
-#        other_parent = None
-#        other_parent_sites = None
-#        other_parent_reads = "NA"
-#        evidence_types = "READBACKED"
-#        
-#        if (dad_read_count > 0) and (dad_read_count >= 10*mom_read_count ):
-#            origin_parent = read_records[key]['dad']
-#            other_parent = read_records[key]['mom']
-#            evidence_count = dad_read_count
-#            origin_parent_sites = read_records[key]['dad_sites']
-#            origin_parent_reads = read_records[key]['dad_reads']
-#            other_parent_sites = read_records[key]['mom_sites']
-#            other_parent_reads = read_records[key]['mom_reads']
-#        elif (mom_read_count > 0) and (mom_read_count >= 10*dad_read_count ):
-#            origin_parent = read_records[key]['mom']
-#            other_parent = read_records[key]['dad']
-#            evidence_count = mom_read_count
-#            origin_parent_sites = read_records[key]['mom_sites']
-#            origin_parent_reads = read_records[key]['mom_reads']
-#            other_parent_sites = read_records[key]['dad_sites']
-#            other_parent_reads = read_records[key]['dad_reads']
-#        else:
-#            origin_parent = read_records[key]['dad']+"|"+read_records[key]['mom']
-#            evidence_count = "{}|{}".format(dad_read_count, mom_read_count)
-#            origin_parent_sites = read_records[key]['dad_sites']
-#            origin_parent_reads = read_records[key]['dad_reads']
-#            other_parent_reads = read_records[key]['mom_reads']
-#            other_parent_sites = read_records[key]['mom_sites']
-#            evidence_types = "AMBIGUOUS_READBACKED"
-#
-#        merged_record = {
-#            'chrom'                 :read_records[key]['region']['chrom'],
-#            'start'                 :int(read_records[key]['region']['start']),
-#            'end'                   :int(read_records[key]['region']['end']),
-#            'vartype'                :read_records[key]['vartype'],
-#            'kid'                   :read_records[key]['kid'],
-#            'origin_parent'         :origin_parent,
-#            'other_parent'          :other_parent,
-#            'evidence_count'        :evidence_count,
-#            'evidence_types'        :evidence_types,
-#            'origin_parent_sites'   :origin_parent_sites,
-#            'origin_parent_reads'   :origin_parent_reads,
-#            'other_parent_sites'   :other_parent_sites,
-#            'other_parent_reads'   :other_parent_reads,
-#        }
-#        merged_records.append(merged_record)
-#    merged_records = sorted(merged_records, key = lambda x: (x['chrom'], x['start'], x['end']))
-#    for mr in merged_records:
-#        print(template.format(**mr))
-
-    
-
-#if __name__ == "__main__":
-#    args = setup_args()
-#    main(args)
