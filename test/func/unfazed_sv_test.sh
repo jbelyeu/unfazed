@@ -103,18 +103,14 @@ elif [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
     grep_header=(grep -E 'FORMAT=<ID=(UOP|UOPS|UET)' out.tmp )
 fi
 
-"${grep_header[@]}" && grep -v "#" out.tmp | grep "UOPS" | cut -f 9-12
-
-
 run phase_sv_vcf_to_vcf_header \
     "${grep_header[@]}"
 if [ $phase_sv_vcf_to_vcf_header ]; then
     assert_exit_code 0
     assert_in_stdout '##FORMAT=<ID=UOP,Number=1,Type=Float,Description="Unfazed-identified origin parent. Paternal:`0`, maternal:`1`, missing:`-1`">'
-    assert_in_stdout '##FORMAT=<ID=UOPS,Number=1,Type=Float,Description="Count of pieces of evidence supporing the unfazed-identified origin parent or `-1` if missing">'
+    assert_in_stdout '##FORMAT=<ID=UOPS,Number=1,Type=Float,Description="Count of pieces of evidence supporting the unfazed-identified origin parent or `-1` if missing">'
     assert_in_stdout '##FORMAT=<ID=UET,Number=1,Type=Float,Description="Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both) or `-1` (missing)">'
 fi
-
 
 run phase_sv_vcf_to_vcf_body \
     grep -v "#" out.tmp | grep "UOPS" | cut -f 9-12

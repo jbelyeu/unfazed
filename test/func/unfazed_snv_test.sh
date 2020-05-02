@@ -77,17 +77,33 @@ if [ $phase_snv_bed_to_bed ]; then
     assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED	50617982'
 fi
 
-run phase_snv_vcf_to_vcf \
-    unfazed \
-        -d $snv_hets_vcf \
-        -s $sites_vcf \
-        -p $ped \
-        --bam-pairs "NA12878":$bam
-if [ $phase_snv_vcf_to_vcf ]; then
+#split the next two tests to decrease the amount of test to stdout
+rm -f out.tmp
+unfazed \
+    -d $snv_hets_vcf \
+    -s $sites_vcf \
+    -p $ped \
+    --outfile out.tmp\
+    --bam-pairs "NA12878":$bam
+
+if [ "$(uname)" == "Darwin" ]; then
+    grep_header=(grep -E 'FORMAT=<ID=(UOP|UOPS|UET)' out.tmp )
+elif [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
+    grep_header=(grep -E 'FORMAT=<ID=(UOP|UOPS|UET)' out.tmp )
+fi
+
+run phase_snv_vcf_to_vcf_header \
+    "${grep_header[@]}"
+if [ $phase_snv_vcf_to_vcf_header ]; then
     assert_exit_code 0
     assert_in_stdout '##FORMAT=<ID=UOP,Number=1,Type=Float,Description="Unfazed-identified origin parent. Paternal:`0`, maternal:`1`, missing:`-1`">'
-    assert_in_stdout '##FORMAT=<ID=UOPS,Number=1,Type=Float,Description="Count of pieces of evidence supporing the unfazed-identified origin parent or `-1` if missing">'
+    assert_in_stdout '##FORMAT=<ID=UOPS,Number=1,Type=Float,Description="Count of pieces of evidence supporting the unfazed-identified origin parent or `-1` if missing">'
     assert_in_stdout '##FORMAT=<ID=UET,Number=1,Type=Float,Description="Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both) or `-1` (missing)">'
+fi
+
+run phase_snv_vcf_to_vcf_body \
+    grep -v "#" out.tmp | grep "UOPS" | cut -f 9-12
+if [ $phase_snv_vcf_to_vcf_body ]; then
     assert_in_stdout 'GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:17,12:29:99:267,0,418:-1:-1:-1	0/1:11,9:20:99:206,0,266:-1:-1:-1	0/1:17,15:32:99:347,0,410:-1:-1:-1'	#16256430
     assert_in_stdout 'GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:10,14:24:99:343,0,224:-1:-1:-1	0/1:13,11:24:99:254,0,312:-1:-1:-1	0/1:26,20:46:99:478,0,660:-1:-1:-1'	#16256512
     assert_in_stdout 'GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:84,51:135:99:1778,0,3267:-1:-1:-1	0/1:108,66:174:99:2334,0,4264:-1:-1:-1	0/1:65,65:130:99:2452,0,2492:-1:-1:-1'	#16266920
