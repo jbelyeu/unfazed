@@ -26,14 +26,16 @@ def setup_args():
     parser.add_argument(
         "-d",
         "--dnms",
-        help="valid VCF OR BED file of the DNMs of interest> If BED, must contain chrom, start, end, kid_id, var_type columns",
+        help="valid VCF OR BED file of the DNMs of interest> If BED,"
+        + " must contain chrom, start, end, kid_id, var_type columns",
         required=True,
     )
 
     parser.add_argument(
         "-s",
         "--sites",
-        help="sorted/bgzipped/indexed VCF/BCF file of SNVs to identify informative sites. Must contain each kid and both parents",
+        help="sorted/bgzipped/indexed VCF/BCF file of SNVs to identify "
+        + "informative sites. Must contain each kid and both parents",
         required=True,
     )
 
@@ -48,14 +50,19 @@ def setup_args():
     parser.add_argument(
         "-b",
         "--bam-dir",
-        help="directory where bam/cram files (named {sample_id}.bam or {sample_id}.cram) are stored for offspring. If not included, --bam-pairs must be set",
+        help="directory where bam/cram files (named {sample_id}.bam or "
+        + "{sample_id}.cram) "
+        + "are stored for offspring. "
+        + "If not included, --bam-pairs must be set",
         type=str,
         required=False,
     )
 
     parser.add_argument(
         "--bam-pairs",
-        help="space-delimited list of pairs in the format {sample_id}:{bam_path} where {sample_id} matches an offspring id from the dnm file. Can be used with --bam-dir arg, must be used in its absence",
+        help="space-delimited list of pairs in the format {sample_id}:{bam_path} "
+        + "where {sample_id} matches an offspring id from the dnm file. "
+        + "Can be used with --bam-dir arg, must be used in its absence",
         type=pair,
         nargs="*",
         required=False,
@@ -68,7 +75,8 @@ def setup_args():
     parser.add_argument(
         "-o",
         "--output-type",
-        help="choose output type. If --dnms is not a VCF/BCF, output must be to BED format. Defaults to match --dnms input file",
+        help="choose output type. If --dnms is not a VCF/BCF,"
+        + " output must be to BED format. Defaults to match --dnms input file",
         type=str,
         choices=["vcf", "bed"],
     )
@@ -82,7 +90,8 @@ def setup_args():
 
     parser.add_argument(
         "--verbose",
-        help="print verbose output including sites and reads used for phasing. Only applies to BED output",
+        help="print verbose output including sites and reads used for phasing. "
+        + "Only applies to BED output",
         action="store_true",
         default=False,
     )

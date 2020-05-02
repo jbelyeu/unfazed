@@ -81,7 +81,7 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                 if site["pos"] == found_pos:
                     continue
                 finder_allele = get_allele_at(
-                    fetched_reads[readname][0], fetched_reads[readname][1], site["pos"]
+                    fetched_reads[readname][0], fetched_reads[readname][1], site["pos"],
                 )
                 non_finder_allele = None
                 if finder_allele:
@@ -106,7 +106,8 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                         if not new_read_allele:
                             continue
 
-                        # if the read's allele at the het site matches the allele in the read we used to find it,
+                        # if the read's allele at the het site matches the allele
+                        # in the read we used to find it,
                         # this read belong to the current haplotype.
                         # If it matches the non_finder allele it belong to the other haplotype
                         # otherwise it's an error
@@ -121,7 +122,7 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
 
     if len(reads_to_add["alt"]) + len(reads_to_add["ref"]) > 0:
         grouped_readsets = connect_reads(
-            grouped_readsets, read_sites, site_reads, reads_to_add, fetched_reads
+            grouped_readsets, read_sites, site_reads, reads_to_add, fetched_reads,
         )
 
     return grouped_readsets
@@ -154,7 +155,7 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
             if goodread(read):
                 try:
                     mate = bamfile.mate(read)
-                except:
+                except ValueError:
                     mate = None
                 if goodread(mate):
                     read_coords = [read.reference_start, read.reference_end]
@@ -163,8 +164,9 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
                         mate_coords[0] <= read_coords[0] <= mate_coords[1]
                         or mate_coords[0] <= read_coords[1] <= mate_coords[1]
                     ):
-                        # this means the mate pairs overlap each other, which is not biologically
-                        # possible and is a sign of an alignment error
+                        # this means the mate pairs overlap each other,
+                        # which is not biologically possible
+                        # and is a sign of an alignment error
                         continue
                     if read.query_name not in read_sites:
                         read_sites[read.query_name] = []
@@ -218,11 +220,10 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
 
 def collect_reads_snv(bam_name, region, het_sites, ref, alt, discordant_len=None):
     """
-    given an alignment file name, a de novo SNV region, 
+    given an alignment file name, a de novo SNV region,
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
-    
     """
     bamfile = pysam.AlignmentFile(bam_name, "rb")
 
@@ -249,7 +250,7 @@ def collect_reads_snv(bam_name, region, het_sites, ref, alt, discordant_len=None
             mate = bamfile.mate(read)
             if not goodread(mate):
                 mate = None
-        except:
+        except ValueError:
             mate = None
 
         # find reads that support the alternate allele and reads that don't
@@ -269,11 +270,10 @@ def collect_reads_snv(bam_name, region, het_sites, ref, alt, discordant_len=None
 
 def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
     """
-    given an alignment file name, a de novo SV region, 
+    given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
-    
     """
     bamfile = pysam.AlignmentFile(bam_name, "rb")
 
@@ -298,13 +298,14 @@ def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
                 chrom = "chr" + chrom
 
             bam_iter = bamfile.fetch(
-                chrom, max(0, position - discordant_len), position + discordant_len
+                chrom, max(0, position - discordant_len), position + discordant_len,
             )
         for read in bam_iter:
             if not goodread(read):
                 continue
             if read.has_tag("SA"):
-                # if it's a splitter and the softclipping begins within SPLITTER_ERR_MARGIN bases of the breaks, keep it
+                # if it's a splitter and the softclipping begins within
+                # SPLITTER_ERR_MARGIN bases of the breaks, keep it
                 if (
                     (position == int(region["start"]))
                     and (
@@ -325,7 +326,7 @@ def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
                     # find mate for informative site check
                     try:
                         mate = bamfile.mate(read)
-                    except:
+                    except ValueError:
                         continue
 
                     if goodread(mate):
@@ -335,7 +336,7 @@ def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
                 # find mate for informative site check
                 try:
                     mate = bamfile.mate(read)
-                except:
+                except ValueError:
                     continue
                 read_positions = [
                     mate.reference_start,

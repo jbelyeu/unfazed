@@ -116,7 +116,8 @@ def get_bam_names(bam_dir, bam_pairs):
             sample_id, bam = bam_pair
             if not os.path.exists(bam) or not os.path.isfile(bam):
                 sys.exit("invalid filename " + bam)
-            # only one match per id using this approach, so overwrite anything entered previously
+            # only one match per id using this approach,#
+            # so overwrite anything entered previously
             bam_dict[sample_id] = set()
             bam_dict[sample_id].add(bam)
     return bam_dict
@@ -142,7 +143,7 @@ def parse_ped(ped, kids):
                 kid_entries[fields[1]] = dict(zip(labels, fields[1:5]))
 
     for sample in kids:
-        if (not sample in kid_entries) and (not sample in missing_parents):
+        if (sample not in kid_entries) and (sample not in missing_parents):
             print(
                 "{} missing from pedigree file, will be skipped".format(sample),
                 file=sys.stderr,
@@ -286,7 +287,8 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
     vcf.add_format_to_header(
         {
             "ID": "UOP",
-            "Description": "Unfazed-identified origin parent. Paternal:`0`, maternal:`1`, missing:`-1`",
+            "Description": "Unfazed-identified origin parent. "
+            + "Paternal:`0`, maternal:`1`, missing:`-1`",
             "Type": "Float",
             "Number": "1",
         }
@@ -294,7 +296,8 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
     vcf.add_format_to_header(
         {
             "ID": "UOPS",
-            "Description": "Count of pieces of evidence supporing the unfazed-identified origin parent or `-1` if missing",
+            "Description": "Count of pieces of evidence supporting the "
+            + "unfazed-identified origin parent or `-1` if missing",
             "Type": "Float",
             "Number": "1",
         }
@@ -302,7 +305,14 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
     vcf.add_format_to_header(
         {
             "ID": "UET",
-            "Description": "Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both) or `-1` (missing)",
+            "Description": "Unfazed evidence type: "
+            + "`0` (readbacked), "
+            + "`1` (allele-balance, for CNVs only), "
+            + "`2` (both), "
+            + "`3` (ambiguous readbacked), "
+            + "`4` (ambiguous allele-balance), "
+            + "`5` (ambiguous both) or "
+            + "`-1` (missing)",
             "Type": "Float",
             "Number": "1",
         }
@@ -477,7 +487,7 @@ def unfazed(args):
     duplicated_samples = set()
     for var_fields in reader(args.dnms):
         sample = var_fields["kid"]
-        if not sample in bam_names_dict:
+        if sample not in bam_names_dict:
             if not (sample in missing_samples):
                 print("missing alignment file for", sample, file=sys.stderr)
                 missing_samples.add(sample)
@@ -530,7 +540,7 @@ def unfazed(args):
 
     if output_type == "vcf":
         write_vcf_output(
-            args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile
+            args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile,
         )
     elif output_type == "bed":
         write_bed_output(all_phased, args.include_ambiguous, args.verbose, args.outfile)

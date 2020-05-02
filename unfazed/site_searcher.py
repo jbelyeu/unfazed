@@ -52,8 +52,8 @@ def binary_search(start, end, informative_sites):
 
 def match_informative_sites(reads, informative_sites):
     """
-    Given a list of pysam reads, 
-    and a dictionary of lists of informative sites, 
+    Given a list of pysam reads,
+    and a dictionary of lists of informative sites,
     return the informative sites that are in the reads.
     Pasing in chrom because the pysam object keeps getting it wrong
     """

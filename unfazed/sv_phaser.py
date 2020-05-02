@@ -36,7 +36,7 @@ def parse_bed(bed):
             dnms.append(dict(zip(labels, line.strip().split()[:6])))
             try:
                 dnms[-1][0] = int(dnms[-1][0])
-            except:
+            except ValueError:
                 pass
             kids.append(dnms[-1]["kid"])
     return dnms, kids
@@ -58,7 +58,7 @@ def phase_by_reads(matches):
                     read_pos = read.get_reference_positions(full_length=True).index(
                         match["pos"]
                     )
-                except:
+                except ValueError:
                     continue
                 kid_allele = read.query_sequence[read_pos]
 
@@ -76,7 +76,8 @@ def phase_by_reads(matches):
 
                 # ref_parent means the parent that has the reference allele at the informative site
                 # ref haplotype means the read comes from the non-denovo haplotye
-                # so if the read comes from the ref_parent and the ref haplotype, de novo is on the alt parent
+                # so if the read comes from the ref_parent and the ref haplotype,
+                # de novo is on the alt parent
                 if read_origin == "ref_parent":
                     if ref_alt == "ref":
                         origin_parent_data[match["alt_parent"]].append(
@@ -249,7 +250,8 @@ def multithread_cnv_phasing(denovo, records, dad_id, mom_id):
 
 def run_cnv_phasing(dnms, pedigrees, vcf, threads):
     """
-    Specialized phasing for CNVs, using the informative sites from the region with a copy-number change
+    Specialized phasing for CNVs,
+    using the informative sites from the region with a copy-number change
     """
     # get informative sites inside CNVs for purely SNV-based phasing
     dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, threads)

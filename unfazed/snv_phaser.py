@@ -47,9 +47,10 @@ def phase_by_reads(matches):
                 else:
                     continue
 
-                # ref_parent means the parent that has the reference allele at the informative site
+                # ref_parent means the parent that has the ref allele at the informative site
                 # ref haplotype means the read comes from the non-denovo haplotye
-                # so if the read comes from the ref_parent and the ref haplotype, de novo is on the alt parent
+                # so if the read comes from the ref_parent and the ref haplotype,
+                # de novo is on the alt parent
                 if read_origin == "ref_parent":
                     if ref_alt == "ref":
                         origin_parent_data[match["alt_parent"]].append(
@@ -78,7 +79,7 @@ def get_refalt(chrom, pos, vcf_filehandle, kid_idx):
         get_prefix(vcf_filehandle), chrom.strip("chr"), pos, int(pos) + 1
     )
     for variant in vcf_filehandle(region):
-        if ref == None:
+        if ref is None:
             ref = variant.REF
         for alt in variant.ALT:
             alts.append(alt)
@@ -97,7 +98,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     if denovo["kid"] not in sample_dict:
         return
     ref, alts = get_refalt(
-        region["chrom"], region["start"], vcf_filehandle, sample_dict[denovo["kid"]]
+        region["chrom"], region["start"], vcf_filehandle, sample_dict[denovo["kid"]],
     )
     if len(alts) < 1:
         print(
@@ -191,7 +192,7 @@ def run_read_phasing(dnms, pedigrees, vcf, threads):
         if threads != 1:
             futures.append(
                 executor.submit(
-                    multithread_read_phasing, denovo, records, vcf, dad_id, mom_id
+                    multithread_read_phasing, denovo, records, vcf, dad_id, mom_id,
                 )
             )
         else:

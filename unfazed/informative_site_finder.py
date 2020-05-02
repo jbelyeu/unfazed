@@ -105,8 +105,8 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
         and (alt_depths[kid_idx] > 2)
         and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 10
     ):
-        # large duplications can be genotyped by unbalanced het inheritance of informative alleles
-        # if there's enough depth
+        # large duplications can be genotyped by unbalanced het inheritance
+        # of informative alleles if there's enough depth
         if genotypes[kid_idx] == HET:
             kid_alt_allele_bal = alt_depths[kid_idx] / float(
                 ref_depths[kid_idx] + alt_depths[kid_idx]
@@ -132,7 +132,7 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
 
 def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
     """
-    Given list of denovo variant positions 
+    Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
     if len(dnms) > 10000:
@@ -263,7 +263,10 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
 
 
 def create_lookups(dnms):
-    # this will be a lookup to find samples for a range where variants are informative for a given denovo
+    """
+    this will be a lookup to find samples for a range where
+    variants are informative for a given denovo
+    """
     samples_by_location = {}
     vars_by_sample = {}
     chrom_ranges = {}
@@ -307,7 +310,7 @@ def get_close_vars(
     chrom, pos, samples_by_location, vars_by_sample, search_dist, whole_region
 ):
     close_var_keys = []
-    if not chrom in samples_by_location:
+    if chrom not in samples_by_location:
         return close_var_keys
     if not whole_region:
         for dn_loc in samples_by_location[chrom]:
@@ -378,7 +381,7 @@ def add_good_candidate_variant(
                 mom_idx, ref_depths, alt_depths, genotypes, gt_quals
             )
         ):
-            if not "het_sites" in vars_by_sample[kid][chrom][pos][i]:
+            if "het_sites" not in vars_by_sample[kid][chrom][pos][i]:
                 vars_by_sample[kid][chrom][pos][i]["het_sites"] = []
             # variant usable for extended read-backed phasing
             vars_by_sample[kid][chrom][pos][i]["het_sites"].append(
@@ -437,13 +440,13 @@ def add_good_candidate_variant(
                         unique_allele = False
             if not unique_allele:
                 continue
-        if not "candidate_sites" in vars_by_sample[kid][chrom][pos][i]:
+        if "candidate_sites" not in vars_by_sample[kid][chrom][pos][i]:
             vars_by_sample[kid][chrom][pos][i]["candidate_sites"] = []
         vars_by_sample[kid][chrom][pos][i]["candidate_sites"].append(candidate)
     return True
 
 
-#########################################################################################################################
+###################################################################################
 def multithread_find_many(
     vcf_name,
     chrom,
@@ -498,7 +501,7 @@ def multithread_find_many(
 
 def find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
     """
-    Given list of denovo variant positions 
+    Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
     samples_by_location, vars_by_sample, chrom_ranges = create_lookups(dnms)
