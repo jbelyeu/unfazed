@@ -424,7 +424,6 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
             "{other_parent_reads}",
         ]
 
-    print("\t".join(header))
     template = "\t".join(template_fields)
     record_summaries = []
 
@@ -438,13 +437,15 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
         record_summaries, key=lambda x: (x["chrom"], x["start"], x["end"])
     )
     if outfile == "/dev/stdout":
+        print("\t".join(header))
         for record_summary in record_summaries:
             record_summary["evidence_types"] = ",".join(
                 record_summary["evidence_types"]
             )
             print(template.format(**record_summary))
     else:
-        with open(outfile) as outfile_fh:
+        with open(outfile, 'w') as outfile_fh:
+            print("\t".join(header), file=outfile_fh)
             for record_summary in record_summaries:
                 record_summary["evidence_types"] = ",".join(
                     record_summary["evidence_types"]
