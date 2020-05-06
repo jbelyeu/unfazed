@@ -105,10 +105,8 @@ readbacked, 4:ambiguous-allele-balance, 5:ambiguous-both, -1:missing.
 VCF output is only possible when given `--dnms` is a VCF file.
 
 
-<details>
-  <summary>VCF lines before/after annotation with unfazed:</summary>
-  
-#### Before:
+#### VCF lines before annotation with unfazed:
+
 ```
 22	16256430	.	A	G	453874	PASS	AC=3;AF=0.495;AN=6;BaseQRankSum=-0.217;ClippingRankSum=-0.212;DP=82746;ExcessHet=2.14748e+09;FS=0;InbreedingCoeff=-0.9859;MLEAC=888;MLEAF=0.497;MQ=21.85;MQ0=0;MQRankSum=-0.138;NEGATIVE_TRAIN_SITE;QD=11.03;ReadPosRankSum=0.072;SOR=8.989;VQSLOD=-3.497;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:17,12:29:99:267,0,418	0/1:11,9:20:99:206,0,266	0/1:17,15:32:99:347,0,410
 22	16256512	.	T	C	834865	PASS	AC=3;AF=0.494;AN=6;BaseQRankSum=2.47;ClippingRankSum=-0.031;DP=147650;ExcessHet=2.14748e+09;FS=0.554;InbreedingCoeff=-0.9823;MLEAC=887;MLEAF=0.496;MQ=25.78;MQ0=0;MQRankSum=-0.328;QD=11.42;ReadPosRankSum=0.223;SOR=0.774;VQSLOD=-3.334;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:10,14:24:99:343,0,224	0/1:13,11:24:99:254,0,312	0/1:26,20:46:99:478,0,660
@@ -152,10 +150,7 @@ chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_t
 Evidence counts and types in BED output match those in VCF output.
 
 
-<details>
-  <summary>BED input/ouput entries:</summary>
-  
-#### Input
+#### BED input
 ```
 #chrom	start	end	kid_id	var_type
 22	16256429	16256430	NA12878	POINT
@@ -170,7 +165,7 @@ Evidence counts and types in BED output match those in VCF output.
 22	30857447	30857448	NA12878	POINT
 
 ```
-#### Output (no entries for variants that cannot be phased)
+#### BED output (no entries for variants that cannot be phased)
 ```
 #chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types
 22	18844941	18844942	POINT	NA12878	NA12892	NA12891	1	READBACKED
@@ -180,7 +175,6 @@ Evidence counts and types in BED output match those in VCF output.
 22	30857447	30857448	POINT	NA12878	NA12891	NA12892	2	READBACKED
 
 ```
-</details>
 
 **Ambiguous results** derive from inconsistent phasing (different parent of origin indicated by different informative sites or reads. These may indicate sequencing errors or mosaic events and will *not* be reported unless the `--include-ambiguous` argument is included.
 
