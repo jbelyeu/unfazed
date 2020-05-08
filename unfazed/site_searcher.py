@@ -29,7 +29,7 @@ def binary_search(start, end, informative_sites):
             matches.append(informative_sites[query_pos])
 
             # check the next ones to see if they also fit the bill
-            for isite in informative_sites[query_pos + 1 :]:
+            for isite in informative_sites[query_pos + 1:]:
                 if start <= isite["pos"] <= end:
                     matches.append(isite)
                 else:

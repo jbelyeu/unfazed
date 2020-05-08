@@ -101,7 +101,12 @@ def setup_args():
         help="name for output file. Defaults to stdout",
         default="/dev/stdout",
     )
-
+    parser.add_argument(
+        "-r",
+        "--reference",
+        help="reference fasta file (required for crams)",
+        required=False,
+    )
     return parser
 
 

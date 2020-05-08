@@ -218,14 +218,21 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
     return extended_grouped_reads
 
 
-def collect_reads_snv(bam_name, region, het_sites, ref, alt, discordant_len=None):
+def collect_reads_snv(
+    bam_name, region, het_sites, ref, alt, cram_ref, discordant_len=None
+):
     """
     given an alignment file name, a de novo SNV region,
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
     """
-    bamfile = pysam.AlignmentFile(bam_name, "rb")
+    if "cram" == bam_name[-4:]:
+        bamfile = pysam.AlignmentFile(bam_name, "rc", reference_filename=cram_ref)
+    else:
+        print("fish")
+        sys.exit()
+        bamfile = pysam.AlignmentFile(bam_name, "rb")
 
     if not discordant_len:
         discordant_len = estimate_discordant_insert_len(bamfile)
@@ -268,14 +275,19 @@ def collect_reads_snv(bam_name, region, het_sites, ref, alt, discordant_len=None
     # return informative_reads
 
 
-def collect_reads_sv(bam_name, region, het_sites, discordant_len=None):
+def collect_reads_sv(
+    bam_name, region, het_sites, reference, cram_ref, discordant_len=None
+):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
     """
-    bamfile = pysam.AlignmentFile(bam_name, "rb")
+    if "cram" == bam_name[-4:]:
+        bamfile = pysam.AlignmentFile(bam_name, "rc", reference_filename=cram_ref)
+    else:
+        bamfile = pysam.AlignmentFile(bam_name, "rb")
 
     if not discordant_len:
         discordant_len = estimate_discordant_insert_len(bamfile)

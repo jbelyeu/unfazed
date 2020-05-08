@@ -116,7 +116,9 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     informative_sites = denovo["candidate_sites"]
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads = collect_reads_snv(denovo["bam"], region, denovo["het_sites"], ref, alt)
+    dnm_reads = collect_reads_snv(
+        denovo["bam"], region, denovo["het_sites"], ref, alt, denovo["cram_ref"]
+    )
     matches = match_informative_sites(dnm_reads, informative_sites)
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:

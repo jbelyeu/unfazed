@@ -97,8 +97,9 @@ def read_vars_vcf(vcfname):
                 }
 
 
-def get_bam_names(bam_dir, bam_pairs):
+def get_bam_names(bam_dir, bam_pairs, cram_ref):
     bam_dict = {}
+    cram_found = False
     if bam_dir is not None:
         for bam in glob(os.path.join(bam_dir, "*.bam")):
             sample_id = os.path.splitext(os.path.basename(bam))[0]
@@ -106,6 +107,7 @@ def get_bam_names(bam_dir, bam_pairs):
                 bam_dict[sample_id] = set()
             bam_dict[sample_id].add(bam)
         for cram in glob(os.path.join(bam_dir, "*.cram")):
+            cram_found = True
             sample_id = os.path.splitext(os.path.basename(cram))[0]
             if sample_id not in bam_dict:
                 bam_dict[sample_id] = set()
@@ -120,6 +122,14 @@ def get_bam_names(bam_dir, bam_pairs):
             # so overwrite anything entered previously
             bam_dict[sample_id] = set()
             bam_dict[sample_id].add(bam)
+            if bam[-4:] == "cram":
+                cram_found = True
+
+    if cram_found:
+        if cram_ref is None:
+            sys.exit("Missing reference file for CRAM")
+        elif not os.path.isfile(cram_ref):
+            sys.exit("Reference file is not valid")
     return bam_dict
 
 
@@ -444,7 +454,7 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
             )
             print(template.format(**record_summary))
     else:
-        with open(outfile, 'w') as outfile_fh:
+        with open(outfile, "w") as outfile_fh:
             print("\t".join(header), file=outfile_fh)
             for record_summary in record_summaries:
                 record_summary["evidence_types"] = ",".join(
@@ -455,7 +465,7 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
 
 def unfazed(args):
     input_type = ""
-    bam_names_dict = get_bam_names(args.bam_dir, args.bam_pairs)
+    bam_names_dict = get_bam_names(args.bam_dir, args.bam_pairs, args.reference)
     snvs = []
     svs = []
     reader = ""
@@ -506,6 +516,7 @@ def unfazed(args):
         kids.add(sample)
         bam = list(bam_names_dict[sample])[0]
         var_fields["bam"] = bam
+        var_fields["cram_ref"] = args.reference
 
         if var_fields["vartype"] in SV_TYPES:
             svs.append(var_fields)

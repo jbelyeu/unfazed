@@ -13,35 +13,6 @@ MIN_MAPQ = 1
 STDEV_COUNT = 3
 
 
-def parse_ped(ped, kids):
-    labels = ["kid", "dad", "mom", "sex"]
-    kid_entries = {}
-    with open(ped, "r") as pedfile:
-        for line in pedfile:
-            fields = line.strip().split()
-            if fields[1] in kids:
-                kid_entries[fields[1]] = dict(zip(labels, fields[1:5]))
-    return kid_entries
-
-
-def parse_bed(bed):
-    labels = ["chrom", "start", "end", "kid", "bam", "vartype"]
-    kids = []
-    dnms = []
-    with open(bed, "r") as bedfile:
-        for line in bedfile:
-            if line[0] == "#":
-                continue
-            # TODO add formatting checks to make sure all the necessary fields are present
-            dnms.append(dict(zip(labels, line.strip().split()[:6])))
-            try:
-                dnms[-1][0] = int(dnms[-1][0])
-            except ValueError:
-                pass
-            kids.append(dnms[-1]["kid"])
-    return dnms, kids
-
-
 def phase_by_reads(matches):
     # parent_ids -> list of informative site matches
     origin_parent_data = {}
@@ -124,7 +95,9 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id):
     }
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads = collect_reads_sv(denovo["bam"], region, denovo["het_sites"])
+    dnm_reads = collect_reads_sv(
+        denovo["bam"], region, denovo["het_sites"], denovo["cram_ref"]
+    )
     matches = match_informative_sites(dnm_reads, denovo["candidate_sites"])
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:
