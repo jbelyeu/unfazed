@@ -106,9 +106,9 @@ Unfazed adds two tags to the FORMAT field of the VCF.
 readbacked, 4:ambiguous-allele-balance, 5:ambiguous-both, -1:missing.
 
 #### Important notes:
-Unfazed replaces `/` with `|` in the GT tag for phased variants to indicate phasing, following the phase order paternal|maternal.
+* Unfazed replaces `/` with `|` in the GT tag for phased variants to indicate phasing, following the phase order paternal|maternal.
 
-VCF output is only possible when `--dnms` is a VCF file.
+* VCF output is only possible when `--dnms` is a VCF file.
 
 
 #### VCF lines before annotation with unfazed:
