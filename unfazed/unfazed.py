@@ -295,15 +295,6 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
     vcf = VCF(in_vcf_name)
     vcf.add_format_to_header(
         {
-            "ID": "UOP",
-            "Description": "Unfazed-identified origin parent. "
-            + "Paternal:`0`, maternal:`1`, missing:`-1`",
-            "Type": "Float",
-            "Number": "1",
-        }
-    )
-    vcf.add_format_to_header(
-        {
             "ID": "UOPS",
             "Description": "Count of pieces of evidence supporting the "
             + "unfazed-identified origin parent or `-1` if missing",
@@ -330,11 +321,10 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
 
     for variant in vcf:
         # keys = []
-        uop = []
+        unfazed_gts = variant.genotypes
         uops = []
         uet = []
         for i, gt in enumerate(variant.gt_types):
-            uop_entry = -1
             uops_entry = -1
             uet_entry = -1
 
@@ -358,9 +348,13 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
                     if record_summary is not None:
                         origin_parent = record_summary["origin_parent"]
                         if origin_parent == read_records[key]["dad"]:
-                            uop_entry = 0
+                            unfazed_gts[i][0] = 1
+                            unfazed_gts[i][1] = 0
+                            unfazed_gts[i][2] = True
                         elif origin_parent == read_records[key]["mom"]:
-                            uop_entry = 1
+                            unfazed_gts[i][0] = 0
+                            unfazed_gts[i][1] = 1
+                            unfazed_gts[i][2] = True
 
                         uops_entry = record_summary["evidence_count"]
 
@@ -382,11 +376,9 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
                         elif "ALLELE-BALANCE" in evidence_types:
                             uet_entry = 1
 
-            uop.append(uop_entry)
             uops.append(uops_entry)
             uet.append(uet_entry)
-
-        variant.set_format("UOP", np.array(uop))
+        variant.genotypes = unfazed_gts
         variant.set_format("UOPS", np.array(uops))
         variant.set_format("UET", np.array(uet))
 
