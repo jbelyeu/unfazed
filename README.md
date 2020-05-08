@@ -13,28 +13,29 @@ Informative sites must be HET in the child and discernibly different in parents,
 Extended read-backed phasing adds sensitivity by chaining reads together using mutually overlapped heterozygous sites, i.e. if two reads have the same allele for a given het site, those reads must come from the same parent. This allows the search distance from a given de novo variant to extend farther than possible with a single read pair.
 
 ### Allele-balance CNV phasing
-Copy-number variants allow an additional method of phasing, wherein potential heterozygous sites are found inside the copy-altered region. 
-* In a deletion, the allele of the de novo CNV's origin parent should disappear and all sites should be HOM_REF for the other parent's allele. 
+Unfazed also applies an additional phasing technique to copy-number variants (CNVs), by using the allele balance of heterozygous sites are found inside the copy-altered region. 
+* In a deletion, the allele of the de novo CNV's origin parent disappears and all sites should be HOM_REF for the other parent's allele. 
 * In a duplication, the allele balance of the de novo CNV's origin parent should be about double in proportion to the allele from the other parent.
 
 ## How to use it 
 Unfazed is available for install from conda. Requires at least Python 3.5.
 
-`conda install unfazed `
+`conda install -c bioconda unfazed `
 
 <details>
   <summary>Unfazed options:</summary>
   
   ```
 
+UNFAZED v0.2.3
 usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR]
                [--bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]] [-t THREADS]
                [-o {vcf,bed}] [--include-ambiguous] [--verbose]
-               [--outfile OUTFILE]
+               [--outfile OUTFILE] [-r REFERENCE]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --version         Installed version (0.1.5)
+  -v, --version         Installed version (0.2.3)
   -d DNMS, --dnms DNMS  valid VCF OR BED file of the DNMs of interest> If BED,
                         must contain chrom, start, end, kid_id, var_type
                         columns (default: None)
@@ -66,6 +67,9 @@ optional arguments:
                         False)
   --outfile OUTFILE     name for output file. Defaults to stdout (default:
                         /dev/stdout)
+  -r REFERENCE, --reference REFERENCE
+                        reference fasta file (required for crams) (default:
+                        None)
 ```
 </details>
 
@@ -92,48 +96,39 @@ unfazed\
 
 This will print a bed file of phased variants. The input bed file must have the following tab-separated columns: chrom, start, end, kid_id, var_type, where var_type is SNV, INDEL, POINT, DEL, DUP, INV, INS, MEI, or BND.
 
-## Interpreting unfazed output
-The output options for unfazed are either an annotated version of the input VCF file or a BED file.
+## Unfazed input and output
+Unfazed will accept as input either a valid VCF file of de novo variants or a BED file with fields described below. Output can be either an annotated VCF or a BED file.
 
 ### VCF annotations
-Unfazed adds three tags to the FORMAT field of the VCF.
-* UOP: origin parent, which may be paternal:0, maternal:1, or missing:-1
+Unfazed adds two tags to the FORMAT field of the VCF.
 * UOPS: support for the UOP call (count of informative sites)
 * UET: evidence type(s) for the UOP call, which may be 0:readbacked, 1:allele-balance (for CNVs only), 2:both, 3:ambiguous-A
 readbacked, 4:ambiguous-allele-balance, 5:ambiguous-both, -1:missing.
 
-VCF output is only possible when given `--dnms` is a VCF file.
+#### Important notes:
+Unfazed replaces `/` with `|` in the GT tag for phased variants to indicate phasing, following the phase order paternal|maternal.
+
+VCF output is only possible when `--dnms` is a VCF file.
 
 
 #### VCF lines before annotation with unfazed:
 
 ```
-22	16256430	.	A	G	453874	PASS	AC=3;AF=0.495;AN=6;BaseQRankSum=-0.217;ClippingRankSum=-0.212;DP=82746;ExcessHet=2.14748e+09;FS=0;InbreedingCoeff=-0.9859;MLEAC=888;MLEAF=0.497;MQ=21.85;MQ0=0;MQRankSum=-0.138;NEGATIVE_TRAIN_SITE;QD=11.03;ReadPosRankSum=0.072;SOR=8.989;VQSLOD=-3.497;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:17,12:29:99:267,0,418	0/1:11,9:20:99:206,0,266	0/1:17,15:32:99:347,0,410
-22	16256512	.	T	C	834865	PASS	AC=3;AF=0.494;AN=6;BaseQRankSum=2.47;ClippingRankSum=-0.031;DP=147650;ExcessHet=2.14748e+09;FS=0.554;InbreedingCoeff=-0.9823;MLEAC=887;MLEAF=0.496;MQ=25.78;MQ0=0;MQRankSum=-0.328;QD=11.42;ReadPosRankSum=0.223;SOR=0.774;VQSLOD=-3.334;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:10,14:24:99:343,0,224	0/1:13,11:24:99:254,0,312	0/1:26,20:46:99:478,0,660
-22	16266920	.	C	CAG	584855	PASS	AC=3;AF=0.363;AN=6;BaseQRankSum=0.697;ClippingRankSum=-0.113;DP=83342;ExcessHet=2.14748e+09;FS=1.952;InbreedingCoeff=-0.571;MLEAC=650;MLEAF=0.364;MQ=16.98;MQ0=0;MQRankSum=-0.005;QD=8.93;ReadPosRankSum=-0.21;SOR=0.445;VQSLOD=2.41;culprit=FS;set=variant;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:84,51:135:99:1778,0,3267	0/1:108,66:174:99:2334,0,4264	0/1:65,65:130:99:2452,0,2492
-22	16277852	.	C	T	274318	VQSRTrancheSNP99.90to100.00	AC=3;AF=0.284;AN=6;BaseQRankSum=4.91;ClippingRankSum=-0.03;DP=157044;ExcessHet=2.14748e+09;FS=0.667;InbreedingCoeff=-0.4018;MLEAC=509;MLEAF=0.285;MQ=17.03;MQ0=0;MQRankSum=-1.706;NEGATIVE_TRAIN_SITE;QD=5.23;ReadPosRankSum=2.73;SOR=0.603;VQSLOD=-17.88;culprit=QD;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL	0/1:84,40:124:99:.:.:764,0,1872	0/1:106,43:149:99:.:.:772,0,2527	0/1:154,58:212:99:.:.:1076,0,3816
-22	18571008	.	G	A	557243	PASS	AC=3;AF=0.667;AN=6;BaseQRankSum=1.17;ClippingRankSum=0;DP=47734;ExcessHet=4.1068;FS=0.612;InbreedingCoeff=-0.015;MLEAC=1184;MLEAF=0.676;MQ=54.25;MQ0=0;MQRankSum=0.077;POSITIVE_TRAIN_SITE;QD=25.94;ReadPosRankSum=0.72;SOR=0.618;VQSLOD=1.91;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL	0/1:6,13:19:99:.:.:409,0,140	0/1:8,11:19:99:.:.:354,0,232	0/1:7,22:29:99:.:.:747,0,163
-22	18844942	.	C	T	678344	VQSRTrancheSNP99.90to100.00	AC=3;AF=0.539;AN=6;BaseQRankSum=3.17;ClippingRankSum=0.044;DP=85970;ExcessHet=2.14748e+09;FS=18.41;InbreedingCoeff=-0.7775;MLEAC=895;MLEAF=0.54;MQ=34.81;MQ0=0;MQRankSum=-1.376;NEGATIVE_TRAIN_SITE;QD=16.04;ReadPosRankSum=0.025;SOR=1.79;VQSLOD=-14.27;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:55,26:81:99:530,0,1495	0/1:77,11:88:52:52,0,2094	0/1:35,46:81:99:1202,0,836
-22	21088146	.	C	G	633192	PASS	AC=3;AF=0.449;AN=6;BaseQRankSum=0.768;ClippingRankSum=-0.065;DP=92196;ExcessHet=13.309;FS=1.195;InbreedingCoeff=-0.0559;MLEAC=804;MLEAF=0.45;MQ=37.08;MQ0=0;MQRankSum=0.358;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=19.29;ReadPosRankSum=0.43;SOR=0.591;VQSLOD=1.74;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:34,38:72:99:991,0,812	0/1:29,26:55:99:758,0,707	0/1:46,57:103:99:1655,0,1073
-22	21141300	.	T	C	636960	PASS	AC=3;AF=0.449;AN=6;BaseQRankSum=0.716;ClippingRankSum=-0.094;DP=82210;ExcessHet=12.0763;FS=0;InbreedingCoeff=-0.0533;MLEAC=804;MLEAF=0.45;MQ=39.81;MQ0=0;MQRankSum=0.034;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=19.83;ReadPosRankSum=0.383;SOR=0.674;VQSLOD=6.33;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL	0/1:45,58:103:99:.:.:1562,0,1256	0/1:49,62:111:99:.:.:1754,0,1331	0/1:69,49:118:99:.:.:1459,0,2013
-22	30857373	.	A	C	939637	PASS	AC=3;AF=0.63;AN=6;BaseQRankSum=0.718;ClippingRankSum=0.209;DP=87540;ExcessHet=3.2255;FS=0.567;InbreedingCoeff=-0.0028;MLEAC=1126;MLEAF=0.63;MQ=38.77;MQ0=0;MQRankSum=0.027;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=24.49;ReadPosRankSum=0.463;SOR=0.629;VQSLOD=2.19;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:47,47:94:99:1478,0,1355	0/1:48,38:86:99:1166,0,1416	0/1:72,73:145:99:2241,0,1931
-22	30857448	.	A	G	815602	PASS	AC=3;AF=0.606;AN=6;BaseQRankSum=0.673;ClippingRankSum=-0.03;DP=82240;ExcessHet=5.3075;FS=0;InbreedingCoeff=-0.0184;MLEAC=1083;MLEAF=0.606;MQ=41.17;MQ0=0;MQRankSum=0.044;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=23.27;ReadPosRankSum=0.243;SOR=0.69;VQSLOD=6.57;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL	0/1:32,31:63:99:861,0,932	0/1:33,40:73:99:1058,0,876	0/1:60,66:126:99:1904,0,1635
+22	16256430	.	A	G	453874	PASS	AC=3;AF=0.495;AN=6	GT:AD:DP:GQ:PL	0/1:17,12:29:99:267,0,418	0/1:11,9:20:99:206,0,266	0/1:17,15:32:99:347,0,410
+22	16256512	.	T	C	834865	PASS	AC=3;AF=0.494;AN=6  GT:AD:DP:GQ:PL	0/1:10,14:24:99:343,0,224	0/1:13,11:24:99:254,0,312	0/1:26,20:46:99:478,0,660
+22	30857373	.	A	C	939637	PASS	AC=3;AF=0.63;AN=6	GT:AD:DP:GQ:PL	0/1:47,47:94:99:1478,0,1355	0/1:48,38:86:99:1166,0,1416	0/1:72,73:145:99:2241,0,1931
+22	30857448	.	A	G	815602	PASS	AC=3;AF=0.606;AN=6	GT:AD:DP:GQ:PL	0/1:32,31:63:99:861,0,932	0/1:33,40:73:99:1058,0,876	0/1:60,66:126:99:1904,0,1635
 ```
 #### After:
-```
-22	16256430	.	A	G	453874	PASS	AC=3;AF=0.495;AN=6;BaseQRankSum=-0.217;ClippingRankSum=-0.212;DP=82746;ExcessHet=2.14748e+09;FS=0;InbreedingCoeff=-0.9859;MLEAC=888;MLEAF=0.497;MQ=21.85;MQ0=0;MQRankSum=-0.138;NEGATIVE_TRAIN_SITE;QD=11.03;ReadPosRankSum=0.072;SOR=8.989;VQSLOD=-3.497;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:17,12:29:99:267,0,418:-1:-1:-1	0/1:11,9:20:99:206,0,266:-1:-1:-1	0/1:17,15:32:99:347,0,410:-1:-1:-1
-22	16256512	.	T	C	834865	PASS	AC=3;AF=0.494;AN=6;BaseQRankSum=2.47;ClippingRankSum=-0.031;DP=147650;ExcessHet=2.14748e+09;FS=0.554;InbreedingCoeff=-0.9823;MLEAC=887;MLEAF=0.496;MQ=25.78;MQ0=0;MQRankSum=-0.328;QD=11.42;ReadPosRankSum=0.223;SOR=0.774;VQSLOD=-3.334;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:10,14:24:99:343,0,224:-1:-1:-1	0/1:13,11:24:99:254,0,312:-1:-1:-1	0/1:26,20:46:99:478,0,660:-1:-1:-1
-22	16266920	.	C	CAG	584855	PASS	AC=3;AF=0.363;AN=6;BaseQRankSum=0.697;ClippingRankSum=-0.113;DP=83342;ExcessHet=2.14748e+09;FS=1.952;InbreedingCoeff=-0.571;MLEAC=650;MLEAF=0.364;MQ=16.98;MQ0=0;MQRankSum=-0.005;QD=8.93;ReadPosRankSum=-0.21;SOR=0.445;VQSLOD=2.41;culprit=FS;set=variant;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:84,51:135:99:1778,0,3267:-1:-1:-1	0/1:108,66:174:99:2334,0,4264:-1:-1:-1	0/1:65,65:130:99:2452,0,2492:-1:-1:-1
-22	16277852	.	C	T	274318	VQSRTrancheSNP99.90to100.00	AC=3;AF=0.284;AN=6;BaseQRankSum=4.91;ClippingRankSum=-0.03;DP=157044;ExcessHet=2.14748e+09;FS=0.667;InbreedingCoeff=-0.4018;MLEAC=509;MLEAF=0.285;MQ=17.03;MQ0=0;MQRankSum=-1.706;NEGATIVE_TRAIN_SITE;QD=5.23;ReadPosRankSum=2.73;SOR=0.603;VQSLOD=-17.88;culprit=QD;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL:UOP:UOPS:UET	0/1:84,40:124:99:.:.:764,0,1872:-1:-1:-1	0/1:106,43:149:99:.:.:772,0,2527:-1:-1:-1	0/1:154,58:212:99:.:.:1076,0,3816:-1:-1:-1
-22	18571008	.	G	A	557243	PASS	AC=3;AF=0.667;AN=6;BaseQRankSum=1.17;ClippingRankSum=0;DP=47734;ExcessHet=4.1068;FS=0.612;InbreedingCoeff=-0.015;MLEAC=1184;MLEAF=0.676;MQ=54.25;MQ0=0;MQRankSum=0.077;POSITIVE_TRAIN_SITE;QD=25.94;ReadPosRankSum=0.72;SOR=0.618;VQSLOD=1.91;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL:UOP:UOPS:UET	0/1:6,13:19:99:.:.:409,0,140:-1:-1:-1	0/1:8,11:19:99:.:.:354,0,232:-1:-1:-1	0/1:7,22:29:99:.:.:747,0,163:-1:-1:-1
-22	18844942	.	C	T	678344	VQSRTrancheSNP99.90to100.00	AC=3;AF=0.539;AN=6;BaseQRankSum=3.17;ClippingRankSum=0.044;DP=85970;ExcessHet=2.14748e+09;FS=18.41;InbreedingCoeff=-0.7775;MLEAC=895;MLEAF=0.54;MQ=34.81;MQ0=0;MQRankSum=-1.376;NEGATIVE_TRAIN_SITE;QD=16.04;ReadPosRankSum=0.025;SOR=1.79;VQSLOD=-14.27;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:55,26:81:99:530,0,1495:1:1:0	0/1:77,11:88:52:52,0,2094:-1:-1:-1	0/1:35,46:81:99:1202,0,836:-1:-1:-1
-22	21088146	.	C	G	633192	PASS	AC=3;AF=0.449;AN=6;BaseQRankSum=0.768;ClippingRankSum=-0.065;DP=92196;ExcessHet=13.309;FS=1.195;InbreedingCoeff=-0.0559;MLEAC=804;MLEAF=0.45;MQ=37.08;MQ0=0;MQRankSum=0.358;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=19.29;ReadPosRankSum=0.43;SOR=0.591;VQSLOD=1.74;culprit=InbreedingCoeff;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:34,38:72:99:991,0,812:1:1:0	0/1:29,26:55:99:758,0,707:-1:-1:-1	0/1:46,57:103:99:1655,0,1073:-1:-1:-1
-22	21141300	.	T	C	636960	PASS	AC=3;AF=0.449;AN=6;BaseQRankSum=0.716;ClippingRankSum=-0.094;DP=82210;ExcessHet=12.0763;FS=0;InbreedingCoeff=-0.0533;MLEAC=804;MLEAF=0.45;MQ=39.81;MQ0=0;MQRankSum=0.034;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=19.83;ReadPosRankSum=0.383;SOR=0.674;VQSLOD=6.33;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PGT:PID:PL:UOP:UOPS:UET	0/1:45,58:103:99:.:.:1562,0,1256:1:2:0	0/1:49,62:111:99:.:.:1754,0,1331:-1:-1:-1	0/1:69,49:118:99:.:.:1459,0,2013:-1:-1:-1
-22	30857373	.	A	C	939637	PASS	AC=3;AF=0.63;AN=6;BaseQRankSum=0.718;ClippingRankSum=0.209;DP=87540;ExcessHet=3.2255;FS=0.567;InbreedingCoeff=-0.0028;MLEAC=1126;MLEAF=0.63;MQ=38.77;MQ0=0;MQRankSum=0.027;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=24.49;ReadPosRankSum=0.463;SOR=0.629;VQSLOD=2.19;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:47,47:94:99:1478,0,1355:0:2:0	0/1:48,38:86:99:1166,0,1416:-1:-1:-1	0/1:72,73:145:99:2241,0,1931:-1:-1:-1
-22	30857448	.	A	G	815602	PASS	AC=3;AF=0.606;AN=6;BaseQRankSum=0.673;ClippingRankSum=-0.03;DP=82240;ExcessHet=5.3075;FS=0;InbreedingCoeff=-0.0184;MLEAC=1083;MLEAF=0.606;MQ=41.17;MQ0=0;MQRankSum=0.044;NEGATIVE_TRAIN_SITE;POSITIVE_TRAIN_SITE;QD=23.27;ReadPosRankSum=0.243;SOR=0.69;VQSLOD=6.57;culprit=FS;set=Intersection;het_var=NA12878	GT:AD:DP:GQ:PL:UOP:UOPS:UET	0/1:32,31:63:99:861,0,932:0:2:0	0/1:33,40:73:99:1058,0,876:-1:-1:-1	0/1:60,66:126:99:1904,0,1635:-1:-1:-1
-```
-UOP, UOPS, and UET tags are added to each record, with -1 for variants/samples that were not phased.
+<pre>
+22	16256430	.	A	G	453874	PASS	AC=3;AF=0.495;AN=6	GT:AD:DP:GQ:PL:UOPS:UET	0/1:17,12:29:99:267,0,418:-1:-1	0/1:11,9:20:99:206,0,266:-1:-1	0/1:17,15:32:99:347,0,410:-1:-1
+22	16256512	.	T	C	834865	PASS	AC=3;AF=0.494;AN=6	GT:AD:DP:GQ:PL:UOPS:UET	0/1:10,14:24:99:343,0,224:-1:-1	0/1:13,11:24:99:254,0,312:-1:-1	0/1:26,20:46:99:478,0,660:-1:-1
+22	30857373	.	A	C	939637	PASS	AC=3;AF=0.63;AN=6	GT:AD:DP:GQ:PL:UOPS:UET	<b>1|0:47,47:94:99:1478,0,1355:2:0</b>	0/1:48,38:86:99:1166,0,1416:-1:-1	0/1:72,73:145:99:2241,0,1931:-1:-1
+22	30857448	.	A	G	815602	PASS	AC=3;AF=0.606;AN=6	GT:AD:DP:GQ:PL:UOPS:UET	<b>1|0:32,31:63:99:861,0,932:2:0</b>	0/1:33,40:73:99:1058,0,876:-1:-1	0/1:60,66:126:99:1904,0,1635:-1:-1
+</pre>
+The GT alleles are separated with `|` for phased variants (where FORMAT fields are __bold__). The added UOPS and UET tags are added to each record, with -1 for variants/samples that were not phased.
 </details>
+
 
 ### BED output
 Either VCF or BED input can produce a BED as output, with the following columns: 
