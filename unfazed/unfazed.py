@@ -249,7 +249,6 @@ def summarize_record(read_record, include_ambiguous, verbose):
         # this just became ambiguous because of contradictory results
         origin_parent = None
         evidence_count += dad_cnv_site_count + mom_cnv_site_count
-        print("cnv site counts", dad_cnv_site_count, mom_cnv_site_count)
         origin_parent_sites += read_record["cnv_dad_sites"]
         other_parent_sites = read_record["cnv_mom_sites"]
         evidence_types.append("AMBIGUOUS_ALLELE-BALANCE")

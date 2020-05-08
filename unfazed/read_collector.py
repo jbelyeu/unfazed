@@ -230,8 +230,6 @@ def collect_reads_snv(
     if "cram" == bam_name[-4:]:
         bamfile = pysam.AlignmentFile(bam_name, "rc", reference_filename=cram_ref)
     else:
-        print("fish")
-        sys.exit()
         bamfile = pysam.AlignmentFile(bam_name, "rb")
 
     if not discordant_len:

@@ -23,13 +23,12 @@ def binary_search(start, end, informative_sites):
         query_end_prev = query_end
         query_pos = int((query_end + query_start) / 2)
         # if the query position is between the start and the end of the read, we've arrived
-        # print(query_start, query_pos, query_end)
         if start <= informative_sites[query_pos]["pos"] < end:
             # keep the one that we found
             matches.append(informative_sites[query_pos])
 
             # check the next ones to see if they also fit the bill
-            for isite in informative_sites[query_pos + 1:]:
+            for isite in informative_sites[query_pos + 1 :]:
                 if start <= isite["pos"] <= end:
                     matches.append(isite)
                 else:
