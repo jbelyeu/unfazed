@@ -273,9 +273,7 @@ def collect_reads_snv(
     # return informative_reads
 
 
-def collect_reads_sv(
-    bam_name, region, het_sites, reference, cram_ref, discordant_len=None
-):
+def collect_reads_sv(bam_name, region, het_sites, cram_ref, discordant_len=None):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
