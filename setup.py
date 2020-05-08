@@ -1,7 +1,6 @@
 import re
 
-from setuptools import find_packages, setup
-
+from setuptools import setup
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -20,7 +19,7 @@ setup(
     version=version,
     description="command line tool for extended read-backed phasing of SNVs and SVs, plus allele-balance phasing for CNVs",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     author="Jonathan Belyeu",
     author_email="jrbelyeu@gmail.com",
     url="https://github.com/jbelyeu/unfazed.git",
