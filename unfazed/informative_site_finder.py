@@ -357,6 +357,9 @@ def add_good_candidate_variant(
     mom = pedigrees[kid]["mom"]
     if None in [kid_idx, dad_idx, mom_idx]:
         return False
+    if pos not in vars_by_sample[kid][chrom]:
+        return False
+
 
     for i, denovo in enumerate(vars_by_sample[kid][chrom][pos]):
         # male chrX variants have to come from mom
