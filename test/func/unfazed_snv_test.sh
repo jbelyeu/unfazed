@@ -97,7 +97,7 @@ run phase_snv_vcf_to_vcf_header \
 if [ $phase_snv_vcf_to_vcf_header ]; then
     assert_exit_code 0
     assert_in_stdout '##FORMAT=<ID=UOPS,Number=1,Type=Float,Description="Count of pieces of evidence supporting the unfazed-identified origin parent or `-1` if missing">'
-    assert_in_stdout '##FORMAT=<ID=UET,Number=1,Type=Float,Description="Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both) or `6` (auto-phased sex-chromosome variant in male), or `-1` (missing)">'
+    assert_in_stdout '##FORMAT=<ID=UET,Number=1,Type=Float,Description="Unfazed evidence type: `0` (readbacked), `1` (allele-balance, for CNVs only), `2` (both), `3` (ambiguous readbacked), `4` (ambiguous allele-balance), `5` (ambiguous both), `6` (auto-phased sex-chromosome variant in male), or `-1` (missing)">'
 fi
 
 run phase_snv_vcf_to_vcf_body \

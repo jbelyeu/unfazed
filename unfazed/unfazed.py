@@ -336,7 +336,7 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
             + "`2` (both), "
             + "`3` (ambiguous readbacked), "
             + "`4` (ambiguous allele-balance), "
-            + "`5` (ambiguous both) "
+            + "`5` (ambiguous both), "
             + "`6` (auto-phased sex-chromosome variant in male), or "
             + "`-1` (missing)",
             "Type": "Float",
