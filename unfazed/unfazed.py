@@ -161,7 +161,32 @@ def parse_ped(ped, kids):
     return kid_entries
 
 
+def summarize_autophased(read_record):
+    chrom = read_record["region"]["chrom"]
+    if chrom.lower().strip("chr") == "y":
+        origin_parent = read_record["dad"]
+        other_parent = read_record["mom"]
+    else:
+        origin_parent = read_record["mom"]
+        other_parent = read_record["dad"]
+
+    record = {
+        "chrom": chrom,
+        "start": int(read_record["region"]["start"]),
+        "end": int(read_record["region"]["end"]),
+        "vartype": read_record["vartype"],
+        "kid": read_record["kid"],
+        "origin_parent": origin_parent,
+        "other_parent": other_parent,
+        "evidence_count": 1,
+        "evidence_types": ["SEX-CHROM"],
+    }
+    return record
+
+
 def summarize_record(read_record, include_ambiguous, verbose):
+    if read_record["evidence_type"] == "SEX-CHROM":
+        return summarize_autophased(read_record)
     dad_read_count = len(read_record["dad_reads"])
     mom_read_count = len(read_record["mom_reads"])
     origin_parent = None
@@ -311,7 +336,8 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
             + "`2` (both), "
             + "`3` (ambiguous readbacked), "
             + "`4` (ambiguous allele-balance), "
-            + "`5` (ambiguous both) or "
+            + "`5` (ambiguous both) "
+            + "`6` (auto-phased sex-chromosome variant in male), or "
             + "`-1` (missing)",
             "Type": "Float",
             "Number": "1",
@@ -366,7 +392,9 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
                             uet_entry = 4
                         elif "AMBIGUOUS_BOTH" in evidence_types:
                             uet_entry = 5
-                        if (
+                        elif "SEX-CHROM" in evidence_types:
+                            uet_entry = 6
+                        elif (
                             "READBACKED" in evidence_types
                             and "ALLELE-BALANCE" in evidence_types
                         ):
@@ -534,9 +562,13 @@ def unfazed(args):
     if (len(snvs) + len(svs)) == 0:
         sys.exit("No phaseable variants")
     if len(svs) > 0:
-        phased_svs = phase_svs(svs, kids, pedigrees, args.sites, args.threads)
+        phased_svs = phase_svs(
+            svs, kids, pedigrees, args.sites, args.threads, args.build
+        )
     if len(snvs) > 0:
-        phased_snvs = phase_snvs(snvs, kids, pedigrees, args.sites, args.threads)
+        phased_snvs = phase_snvs(
+            snvs, kids, pedigrees, args.sites, args.threads, args.build
+        )
 
     all_phased = phased_snvs
     all_phased.update(phased_svs)

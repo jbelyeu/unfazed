@@ -11,6 +11,26 @@ from .site_searcher import match_informative_sites
 MILLION = 1000000
 MIN_MAPQ = 1
 STDEV_COUNT = 3
+SEX_KEY = {"male": 1, "female": 2}
+# https://www.ncbi.nlm.nih.gov/grc/human
+grch37_par1 = {
+    "x": [10001, 2781479],
+    "y": [10001, 2781479],
+}
+grch37_par2 = {
+    "x": [155701383, 156030895],
+    "y": [56887903, 57217415],
+}
+
+grch38_par1 = {
+    "x": [60001, 2699520],
+    "y": [10001, 2649520],
+}
+
+grch38_par2 = {
+    "x": [154931044, 155260560],
+    "y": [59034050, 59363566],
+}
 
 
 def phase_by_reads(matches):
@@ -147,10 +167,10 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id):
     records["_".join(key)] = record
 
 
-def run_read_phasing(dnms, pedigrees, vcf, threads):
+def run_read_phasing(dnms, pedigrees, vcf, threads, build):
     # get informative sites near the breakpoints of SVs for reab-backed phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 5000, threads, whole_region=False
+        dnms, pedigrees, vcf, 5000, threads, build, whole_region=False
     )
     records = {}
     if threads != 1:
@@ -160,6 +180,8 @@ def run_read_phasing(dnms, pedigrees, vcf, threads):
     for denovo in dnms_with_informative_sites:
         dad_id = pedigrees[denovo["kid"]]["dad"]
         mom_id = pedigrees[denovo["kid"]]["mom"]
+        if autophase(denovo, pedigrees, records, dad_id, mom_id, build):
+            continue
 
         if "candidate_sites" not in denovo:
             continue
@@ -221,13 +243,66 @@ def multithread_cnv_phasing(denovo, records, dad_id, mom_id):
     records["_".join(key)] = record
 
 
-def run_cnv_phasing(dnms, pedigrees, vcf, threads):
+def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
+    """
+    variants in males on the X or Y chromosome and not in the
+    pseudoautosomal regions can be automatically phased to the
+    dad (if Y) or mom (if x)
+    """
+    chrom = denovo["chrom"].lower().strip("chr")
+    if chrom not in ["y", "x"]:
+        return False
+    if int(pedigrees[denovo["kid"]]["sex"]) != SEX_KEY["male"]:
+        return False
+    if build not in ["37", "38"]:
+        return False
+
+    if build == "37":
+        par1 = grch37_par1
+        par2 = grch37_par2
+
+    if build == "38":
+        par1 = grch38_par1
+        par2 = grch38_par2
+    # variant is pseudoautosomal
+    if (
+        par1[chrom][0] <= denovo["start"] <= par1[chrom][1]
+        or par2[chrom][0] <= denovo["start"] <= par2[chrom][1]
+    ):
+        return False
+
+    region = {
+        "chrom": denovo["chrom"],
+        "start": denovo["start"],
+        "end": denovo["end"],
+    }
+    record = {
+        "region": region,
+        "vartype": denovo["vartype"],
+        "kid": denovo["kid"],
+        "dad": dad_id,
+        "mom": mom_id,
+        "cnv_dad_sites": "NA",
+        "cnv_mom_sites": "NA",
+        "cnv_evidence_type": "SEX-CHROM",
+        "dad_sites": "",
+        "mom_sites": "",
+        "evidence_type": "SEX-CHROM",
+        "dad_reads": [],
+        "mom_reads": [],
+    }
+
+    key = [str(r) for r in region.values()] + [denovo["kid"], denovo["vartype"]]
+    records["_".join(key)] = record
+
+
+def run_cnv_phasing(dnms, pedigrees, vcf, threads, build):
     """
     Specialized phasing for CNVs,
     using the informative sites from the region with a copy-number change
     """
     # get informative sites inside CNVs for purely SNV-based phasing
-    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, threads)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, build, threads)
     records = {}
     if threads != 1:
         executor = ThreadPoolExecutor(threads)
@@ -236,6 +311,8 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads):
     for denovo in dnms_with_informative_sites:
         dad_id = pedigrees[denovo["kid"]]["dad"]
         mom_id = pedigrees[denovo["kid"]]["mom"]
+        if autophase(denovo, pedigrees, records, dad_id, mom_id, build):
+            continue
 
         if denovo["vartype"] not in ["DEL", "DUP"]:
             continue
@@ -262,9 +339,9 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads):
 
 
 # def phase_svs(args):
-def phase_svs(dnms, kids, pedigrees, sites, threads):
-    cnv_records = run_cnv_phasing(dnms, pedigrees, sites, threads)
-    read_records = run_read_phasing(dnms, pedigrees, sites, threads)
+def phase_svs(dnms, kids, pedigrees, sites, threads, build):
+    cnv_records = run_cnv_phasing(dnms, pedigrees, sites, threads, build)
+    read_records = run_read_phasing(dnms, pedigrees, sites, threads, build)
     for key in cnv_records:
         if key not in read_records:
             read_records[key] = cnv_records[key]

@@ -107,6 +107,15 @@ def setup_args():
         help="reference fasta file (required for crams)",
         required=False,
     )
+    parser.add_argument(
+        "--build",
+        help="human genome build, used to determine sex "
+        + "chromosome pseudoautosomal regions. "
+        + "If `na` option is chosen, sex chromosomes will not be auto-phased",
+        choices=["37", "38", "na"],
+        default="38",
+        type=str,
+    )
     return parser
 
 

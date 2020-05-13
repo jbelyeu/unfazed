@@ -11,6 +11,24 @@ HET = 1
 HOM_REF = 0
 
 SEX_KEY = {"male": 1, "female": 2}
+grch37_par1 = {
+    "x": [10001, 2781479],
+    "y": [10001, 2781479],
+}
+grch37_par2 = {
+    "x": [155701383, 156030895],
+    "y": [56887903, 57217415],
+}
+
+grch38_par1 = {
+    "x": [60001, 2699520],
+    "y": [10001, 2649520],
+}
+
+grch38_par2 = {
+    "x": [154931044, 155260560],
+    "y": [59034050, 59363566],
+}
 
 
 def get_prefix(vcf):
@@ -130,22 +148,58 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
     return kid_allele
 
 
-def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
+def autophaseable(denovo, pedigrees, build):
+    """
+    variants in males on the X or Y chromosome and not in the
+    pseudoautosomal regions can be automatically phased to the
+    dad (if Y) or mom (if x)
+    """
+
+    chrom = denovo["chrom"].lower().strip("chr")
+    if chrom not in ["y", "x"]:
+        return False
+    if int(pedigrees[denovo["kid"]]["sex"]) != SEX_KEY["male"]:
+        return False
+    if build not in ["37", "38"]:
+        return False
+
+    if build == "37":
+        par1 = grch37_par1
+        par2 = grch37_par2
+
+    if build == "38":
+        par1 = grch38_par1
+        par2 = grch38_par2
+    # variant is pseudoautosomal
+    if (
+        par1[chrom][0] <= denovo["start"] <= par1[chrom][1]
+        or par2[chrom][0] <= denovo["start"] <= par2[chrom][1]
+    ):
+        return False
+    return True
+
+
+def find(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=True):
     """
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
     if len(dnms) > 10000:
-        return find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region)
+        return find_many(
+            dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region
+        )
     elif len(dnms) <= 0:
         return
 
     vcf = VCF(vcf_name)
     sample_dict = dict(zip(vcf.samples, range(len(vcf.samples))))
     for i, denovo in enumerate(dnms):
+        if autophaseable(denovo, pedigrees, build):
+            continue
         kid_id = denovo["kid"]
         dad_id = pedigrees[denovo["kid"]]["dad"]
         mom_id = pedigrees[denovo["kid"]]["mom"]
+
         missing = False
         for sample_id in [kid_id, dad_id, mom_id]:
             if sample_id not in sample_dict:
@@ -262,7 +316,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
     return dnms
 
 
-def create_lookups(dnms):
+def create_lookups(dnms, pedigrees, build):
     """
     this will be a lookup to find samples for a range where
     variants are informative for a given denovo
@@ -271,6 +325,9 @@ def create_lookups(dnms):
     vars_by_sample = {}
     chrom_ranges = {}
     for denovo in dnms:
+        if autophaseable(denovo, pedigrees, build):
+            continue
+
         chrom = denovo["chrom"]
         start = int(denovo["start"])
         end = int(denovo["end"])
@@ -359,7 +416,6 @@ def add_good_candidate_variant(
         return False
     if pos not in vars_by_sample[kid][chrom]:
         return False
-
 
     for i, denovo in enumerate(vars_by_sample[kid][chrom][pos]):
         # male chrX variants have to come from mom
