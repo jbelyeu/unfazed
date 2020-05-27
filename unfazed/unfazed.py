@@ -16,7 +16,7 @@ HOM_ALT = 2
 HET = 1
 HOM_REF = 0
 VCF_TYPES = ["vcf", "vcf.gz", "bcf"]
-SV_TYPES = ["DEL", "DUP", "INV", "CNV", "DUP:TANDEM", "DEL:ME"]
+SV_TYPES = ["DEL", "DUP", "INV", "CNV", "DUP:TANDEM", "DEL:ME", "CPX", "CTX"]
 SNV_TYPE = "POINT"
 
 labels = ["chrom", "start", "end", "kid", "vartype"]
@@ -218,7 +218,7 @@ def summarize_record(read_record, include_ambiguous, verbose):
         other_parent_sites += read_record["dad_sites"]
         other_parent_reads += read_record["dad_reads"]
         evidence_types.append("READBACKED")
-    else:
+    elif dad_read_count > 0 and mom_read_count > 0:
         origin_parent = read_record["dad"] + "|" + read_record["mom"]
         evidence_count = dad_read_count + mom_read_count
         origin_parent_sites += read_record["dad_sites"]
