@@ -17,10 +17,12 @@ SPLITTER_ERR_MARGIN = 5
 EXTENDED_RB_READ_GOAL = 100
 
 
-def estimate_discordant_insert_len(bamfile):
+def estimate_concordant_insert_len(bamfile):
     insert_sizes = []
     for i, read in enumerate(bamfile):
-        insert_sizes.append(abs(read.tlen))
+        insert = abs(read.tlen-(READLEN*2))
+        insert_sizes.append(insert)
+
         if i >= MILLION:
             break
     insert_sizes = np.array(insert_sizes)
@@ -29,7 +31,8 @@ def estimate_discordant_insert_len(bamfile):
 
     frag_len = int(np.mean(insert_sizes))
     stdev = np.std(insert_sizes)
-    return frag_len + (stdev * STDEV_COUNT)
+    concordant_size = frag_len + (stdev * STDEV_COUNT)
+    return concordant_size
 
 
 def goodread(read):
@@ -92,7 +95,6 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
 
                 if not (finder_allele and non_finder_allele):
                     continue
-
                 for site_readname in site_reads[site["pos"]]:
                     # if we haven't already found the reads in the next_site, add them
                     if (site_readname not in grouped_readsets["ref"]) and (
@@ -156,7 +158,7 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
                 try:
                     mate = bamfile.mate(read)
                 except ValueError:
-                    mate = None
+                    continue
                 if goodread(mate):
                     read_coords = [read.reference_start, read.reference_end]
                     mate_coords = [mate.reference_start, mate.reference_end]
@@ -219,7 +221,7 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
 
 
 def collect_reads_snv(
-    bam_name, region, het_sites, ref, alt, cram_ref, discordant_len=None
+    bam_name, region, het_sites, ref, alt, cram_ref, concordant_upper_len=None
 ):
     """
     given an alignment file name, a de novo SNV region,
@@ -232,8 +234,8 @@ def collect_reads_snv(
     else:
         bamfile = pysam.AlignmentFile(bam_name, "rb")
 
-    if not discordant_len:
-        discordant_len = estimate_discordant_insert_len(bamfile)
+    if not concordant_upper_len:
+        concordant_upper_len = estimate_concordant_insert_len(bamfile)
 
     supporting_reads = []
     position = int(region["start"])
@@ -254,9 +256,9 @@ def collect_reads_snv(
         try:
             mate = bamfile.mate(read)
             if not goodread(mate):
-                mate = None
+                continue
         except ValueError:
-            mate = None
+            continue
 
         # find reads that support the alternate allele and reads that don't
         read_allele = get_allele_at(read, mate, position)
@@ -273,7 +275,7 @@ def collect_reads_snv(
     # return informative_reads
 
 
-def collect_reads_sv(bam_name, region, het_sites, cram_ref, discordant_len=None):
+def collect_reads_sv(bam_name, region, het_sites, cram_ref, concordant_upper_len=None):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
@@ -285,8 +287,8 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, discordant_len=None)
     else:
         bamfile = pysam.AlignmentFile(bam_name, "rb")
 
-    if not discordant_len:
-        discordant_len = estimate_discordant_insert_len(bamfile)
+    if not concordant_upper_len:
+        concordant_upper_len = estimate_concordant_insert_len(bamfile)
 
     supporting_reads = []
     var_len = abs(float(region["end"]) - float(region["start"]))
@@ -295,8 +297,8 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, discordant_len=None)
         try:
             bam_iter = bamfile.fetch(
                 region["chrom"],
-                max(0, position - discordant_len),
-                position + discordant_len,
+                max(0, position - concordant_upper_len),
+                position + concordant_upper_len,
             )
         except ValueError:
             chrom = region["chrom"]
@@ -306,58 +308,73 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, discordant_len=None)
                 chrom = "chr" + chrom
 
             bam_iter = bamfile.fetch(
-                chrom, max(0, position - discordant_len), position + discordant_len,
+                chrom, max(0, position - concordant_upper_len), position + concordant_upper_len,
             )
         for read in bam_iter:
             if not goodread(read):
                 continue
+
+            # find mate for informative site check
+            try:
+                mate = bamfile.mate(read)
+            except ValueError:
+                continue
+            insert_size = abs(read.tlen-(READLEN*2))
+            if not goodread(mate):
+                continue
+
             if read.has_tag("SA"):
-                # if it's a splitter and the softclipping begins within
+                # if it's a splitter and the clipping begins within
                 # SPLITTER_ERR_MARGIN bases of the breaks, keep it
-                if (
-                    (position == int(region["start"]))
-                    and (
-                        (position - SPLITTER_ERR_MARGIN)
-                        <= read.get_reference_positions()[-1]
-                        <= (position + SPLITTER_ERR_MARGIN)
-                    )
-                ) or (
-                    (position == int(region["end"]))
-                    and (
-                        (position - SPLITTER_ERR_MARGIN)
-                        <= read.get_reference_positions()[0]
-                        <= (position + SPLITTER_ERR_MARGIN)
-                    )
+                if ((position - SPLITTER_ERR_MARGIN) <= read.reference_start <= (position + SPLITTER_ERR_MARGIN) 
+                    or (position - SPLITTER_ERR_MARGIN) <= read.reference_end <= (position + SPLITTER_ERR_MARGIN)
                 ):
                     supporting_reads.append(read)
-
-                    # find mate for informative site check
-                    try:
-                        mate = bamfile.mate(read)
-                    except ValueError:
-                        continue
-
-                    if goodread(mate):
-                        supporting_reads.append(mate)
-
-            elif read.tlen > discordant_len and (0.7 < abs(var_len / read.tlen) < 1.3):
+                    supporting_reads.append(mate)
+            elif ((insert_size > concordant_upper_len)
+                    and (0.7 < abs(var_len / insert_size) < 1.3)):
                 # find mate for informative site check
                 try:
                     mate = bamfile.mate(read)
                 except ValueError:
                     continue
-                read_positions = [
-                    mate.reference_start,
-                    read.reference_start,
-                    mate.reference_end,
-                    read.reference_end,
+                left_read_positions = [
+                    min(mate.reference_start, read.reference_start),
+                    min(mate.reference_end,read.reference_end)
                 ]
-                read_positions.sort()
-                if goodread(mate):
+                right_read_positions = [
+                    max(mate.reference_start, read.reference_start),
+                    max(mate.reference_end,read.reference_end)
+                ]
+                concordant_with_wiggle = int(concordant_upper_len)
+                if not ((region['start']-concordant_with_wiggle) < left_read_positions[0] < (region['start']+concordant_with_wiggle)
+                        and (region['end']-concordant_with_wiggle) < right_read_positions[0] < (region['end']+concordant_with_wiggle)):
+                    continue
+
+                supporting_reads.append(mate)
+                supporting_reads.append(read)
+            else: #find clipped reads that aren't split alignment but still support the variant
+                ref_positions = read.get_reference_positions(full_length=True)
+                if position in ref_positions:
+                    region_pos = ref_positions.index(position)
+                elif position-1 in ref_positions:
+                    region_pos = ref_positions.index(position-1)
+                elif position+1 in ref_positions:
+                    region_pos = ref_positions.index(position+1)
+                else:
+                    continue
+                if (region_pos < 2 ) or (region_pos > (len(ref_positions)-4)):
+                    continue
+                before_positions = list(set(ref_positions[:region_pos-1]))
+                after_positions = list(set(ref_positions[region_pos+1:]))
+                #identify clipping that matches the variant
+                if (len(before_positions) == 1 and before_positions[0] is None or 
+                    len(after_positions) == 1 and after_positions[0] is None):
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
     informative_reads = {"alt": supporting_reads, "ref": []}
-    return group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    informative_reads = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    return informative_reads
 
 
 if __name__ == "__main__":

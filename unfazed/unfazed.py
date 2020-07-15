@@ -232,7 +232,7 @@ def summarize_record(read_record, include_ambiguous, verbose):
     dad_cnv_site_count = len(read_record["cnv_dad_sites"])
     mom_cnv_site_count = len(read_record["cnv_mom_sites"])
     if (dad_cnv_site_count > 0) and (dad_cnv_site_count >= 10 * mom_cnv_site_count):
-        if origin_parent == read_record["mom"]:
+        if origin_parent == read_record["mom"] and not ("READBACKED" in evidence_types):
             # this just became ambiguous because of contradictory results
             origin_parent = None
             evidence_count += dad_cnv_site_count + mom_cnv_site_count
@@ -249,10 +249,12 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent_reads += read_record["dad_reads"]
             other_parent_sites += read_record["mom_sites"]
             other_parent_reads += read_record["mom_reads"]
+            if ("AMBIGUOUS_READBACKED" in evidence_types):
+                evidence_types.remove("AMBIGUOUS_READBACKED")
             evidence_types.append("ALLELE-BALANCE")
 
     elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10 * dad_cnv_site_count):
-        if origin_parent == read_record["dad"]:
+        if (origin_parent == read_record["dad"]) and not ("READBACKED" in evidence_types):
             # this just became ambiguous because of contradictory results
             origin_parent = None
             evidence_count += dad_cnv_site_count + mom_cnv_site_count
@@ -269,8 +271,10 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent_reads += read_record["mom_reads"]
             other_parent_sites += read_record["dad_sites"]
             other_parent_reads += read_record["dad_reads"]
+            if ("AMBIGUOUS_READBACKED" in evidence_types):
+                evidence_types.remove("AMBIGUOUS_READBACKED")
             evidence_types.append("ALLELE-BALANCE")
-    elif (dad_cnv_site_count + mom_cnv_site_count) > 0:
+    elif ((dad_cnv_site_count + mom_cnv_site_count) > 0) and not ("READBACKED" in evidence_types):
         # this just became ambiguous because of contradictory results
         origin_parent = None
         evidence_count += dad_cnv_site_count + mom_cnv_site_count

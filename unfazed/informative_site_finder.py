@@ -238,6 +238,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=Tr
                 "ref_allele": variant.REF,
                 "alt_allele": variant.ALT[0],
             }
+
             if (
                 (genotypes[kid_idx] == HET)
                 and is_high_quality_site(
@@ -308,8 +309,9 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=Tr
                             unique_allele = False
                 if not unique_allele:
                     continue
-            candidate_sites.append(candidate)
 
+            candidate_sites.append(candidate)
+        
         denovo["candidate_sites"] = sorted(candidate_sites, key=lambda x: x["pos"])
         denovo["het_sites"] = sorted(het_sites, key=lambda x: x["pos"])
         dnms[i] = denovo

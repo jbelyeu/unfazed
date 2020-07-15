@@ -113,13 +113,12 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id):
         "start": denovo["start"],
         "end": denovo["end"],
     }
-
     # these are reads that support the ref or alt allele of the de novo variant
     dnm_reads = collect_reads_sv(
         denovo["bam"], region, denovo["het_sites"], denovo["cram_ref"]
     )
     matches = match_informative_sites(dnm_reads, denovo["candidate_sites"])
-
+    
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:
         print(
             "No reads overlap informative sites for variant {chrom}:{start}-{end}".format(
@@ -183,11 +182,9 @@ def run_read_phasing(dnms, pedigrees, vcf, threads, build):
         if autophase(denovo, pedigrees, records, dad_id, mom_id, build):
             continue
 
-        if "candidate_sites" not in denovo:
-            continue
         if "candidate_sites" not in denovo or len(denovo["candidate_sites"]) == 0:
             print(
-                "No usable informative sites for variant {}:{}-{}".format(
+                "No usable informative sites for read-based phasing of variant {}:{}-{}".format(
                     denovo["chrom"], denovo["start"], denovo["end"]
                 ),
                 file=sys.stderr,
@@ -203,8 +200,6 @@ def run_read_phasing(dnms, pedigrees, vcf, threads, build):
             multithread_read_phasing(denovo, records, dad_id, mom_id)
     if threads != 1:
         wait(futures)
-    return records
-
     return records
 
 
@@ -319,7 +314,7 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads, build):
 
         if "candidate_sites" not in denovo or len(denovo["candidate_sites"]) == 0:
             print(
-                "No usable informative sites for variant {}:{}-{}".format(
+                "No usable informative sites for allele-balance phasing of variant {}:{}-{}".format(
                     denovo["chrom"], denovo["start"], denovo["end"]
                 ),
                 file=sys.stderr,
