@@ -87,7 +87,7 @@ if [ $phase_sv_vcf_to_bed ]; then
     assert_in_stdout '22	49077625	49077902	DEL	NA12878	NA12891	NA12892	3	READBACKED	49077324,49077325,49078212'
 fi
 
-#split the next two tests to decrease the amount of test to stdout
+#split the next two tests to decrease the amount of text to stdout
 rm -f out.tmp
 unfazed \
     -d $sv_hets_vcf \
