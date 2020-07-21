@@ -116,6 +116,13 @@ def setup_args():
         default="38",
         type=str,
     )
+
+    parser.add_argument(
+        "--no-extended",
+        help="do not perform extended read-based phasing (default True)",
+        action="store_true",
+        default=False,
+    )
     return parser
 
 

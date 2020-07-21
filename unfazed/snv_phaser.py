@@ -106,7 +106,7 @@ def get_refalt(chrom, pos, vcf_filehandle, kid_idx):
     return ref, alts
 
 
-def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
+def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
     vcf_filehandle = VCF(vcf)
     sample_dict = dict(zip(vcf_filehandle.samples, range(len(vcf_filehandle.samples))))
 
@@ -137,7 +137,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
 
     # these are reads that support the ref or alt allele of the de novo variant
     dnm_reads = collect_reads_snv(
-        denovo["bam"], region, denovo["het_sites"], ref, alt, denovo["cram_ref"]
+        denovo["bam"], region, denovo["het_sites"], ref, alt, denovo["cram_ref"], no_extended
     )
     matches = match_informative_sites(dnm_reads, informative_sites)
 
@@ -188,7 +188,7 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id):
     records["_".join(key)] = record
 
 
-def run_read_phasing(dnms, pedigrees, vcf, threads, build):
+def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended):
     # get informative sites near SNVs for read-backed phasing
     dnms_with_informative_sites = find(
         dnms, pedigrees, vcf, 5000, threads, build, whole_region=False
@@ -216,11 +216,11 @@ def run_read_phasing(dnms, pedigrees, vcf, threads, build):
         if threads != 1:
             futures.append(
                 executor.submit(
-                    multithread_read_phasing, denovo, records, vcf, dad_id, mom_id,
+                    multithread_read_phasing, denovo, records, vcf, dad_id, mom_id, no_extended
                 )
             )
         else:
-            multithread_read_phasing(denovo, records, vcf, dad_id, mom_id)
+            multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended)
     if threads != 1:
         wait(futures)
     return records
@@ -280,5 +280,5 @@ def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
 
 
 # def phase_snvs(args):
-def phase_snvs(dnms, kids, pedigrees, sites, threads, build):
-    return run_read_phasing(dnms, pedigrees, sites, threads, build)
+def phase_snvs(dnms, kids, pedigrees, sites, threads, build, no_extended):
+    return run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended)

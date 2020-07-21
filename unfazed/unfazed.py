@@ -185,6 +185,8 @@ def summarize_autophased(read_record):
 
 
 def summarize_record(read_record, include_ambiguous, verbose):
+    print(read_record['dad_reads'])
+    print(read_record['mom_reads'])
     if read_record["evidence_type"] == "SEX-CHROM":
         return summarize_autophased(read_record)
     dad_read_count = len(read_record["dad_reads"])
@@ -567,11 +569,11 @@ def unfazed(args):
         sys.exit("No phaseable variants")
     if len(svs) > 0:
         phased_svs = phase_svs(
-            svs, kids, pedigrees, args.sites, args.threads, args.build
+            svs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended
         )
     if len(snvs) > 0:
         phased_snvs = phase_snvs(
-            snvs, kids, pedigrees, args.sites, args.threads, args.build
+            snvs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended
         )
 
     all_phased = phased_snvs

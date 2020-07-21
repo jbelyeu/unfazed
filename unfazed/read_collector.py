@@ -221,7 +221,7 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
 
 
 def collect_reads_snv(
-    bam_name, region, het_sites, ref, alt, cram_ref, concordant_upper_len=None
+    bam_name, region, het_sites, ref, alt, cram_ref, no_extended, concordant_upper_len=None
 ):
     """
     given an alignment file name, a de novo SNV region,
@@ -259,6 +259,10 @@ def collect_reads_snv(
                 continue
         except ValueError:
             continue
+        ref_positions = read.get_reference_positions(full_length=True)
+        mate_ref_positions = mate.get_reference_positions(full_length=True)
+        if ((ref_positions.count(None) > 5) or (mate_ref_positions.count(None) > 5)):
+            continue
 
         # find reads that support the alternate allele and reads that don't
         read_allele = get_allele_at(read, mate, position)
@@ -270,12 +274,13 @@ def collect_reads_snv(
             informative_reads["alt"].append(read)
             if mate:
                 informative_reads["alt"].append(mate)
-    res = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
-    return res
-    # return informative_reads
+    if no_extended:
+        return informative_reads
+    informative_reads = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    return informative_reads
 
 
-def collect_reads_sv(bam_name, region, het_sites, cram_ref, concordant_upper_len=None):
+def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len=None):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
@@ -373,6 +378,8 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, concordant_upper_len
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
     informative_reads = {"alt": supporting_reads, "ref": []}
+    if no_extended:
+        return informative_reads
     informative_reads = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
     return informative_reads
 
