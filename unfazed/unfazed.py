@@ -185,8 +185,6 @@ def summarize_autophased(read_record):
 
 
 def summarize_record(read_record, include_ambiguous, verbose):
-    print(read_record['dad_reads'])
-    print(read_record['mom_reads'])
     if read_record["evidence_type"] == "SEX-CHROM":
         return summarize_autophased(read_record)
     dad_read_count = len(read_record["dad_reads"])
