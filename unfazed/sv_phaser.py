@@ -107,7 +107,7 @@ def phase_by_snvs(informative_sites):
     return origin_parent_data
 
 
-def multithread_read_phasing(denovo, records, dad_id, mom_id):
+def multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended):
     region = {
         "chrom": denovo["chrom"],
         "start": denovo["start"],
@@ -115,7 +115,7 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id):
     }
     # these are reads that support the ref or alt allele of the de novo variant
     dnm_reads = collect_reads_sv(
-        denovo["bam"], region, denovo["het_sites"], denovo["cram_ref"]
+        denovo["bam"], region, denovo["het_sites"], denovo["cram_ref"], no_extended
     )
     matches = match_informative_sites(dnm_reads, denovo["candidate_sites"])
     
