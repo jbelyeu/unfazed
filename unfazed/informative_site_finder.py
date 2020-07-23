@@ -408,7 +408,7 @@ def get_family_indexes(kid, pedigrees, sample_dict):
 
 
 def add_good_candidate_variant(
-    variant, vars_by_sample, dn_key, pedigrees, whole_region, sample_dict
+    variant, vars_by_sample, dn_key, pedigrees, whole_region, sample_dict, build
 ):
     kid, chrom, pos = dn_key
     kid_idx, dad_idx, mom_idx = get_family_indexes(kid, pedigrees, sample_dict)
@@ -420,8 +420,7 @@ def add_good_candidate_variant(
         return False
 
     for i, denovo in enumerate(vars_by_sample[kid][chrom][pos]):
-        # male chrX variants have to come from mom
-        if variant.CHROM == "X" and (pedigrees[kid]["sex"] == SEX_KEY["male"]):
+        if autophaseable(denovo, pedigrees, build):
             continue
         genotypes = variant.gt_types
         ref_depths = variant.gt_ref_depths
@@ -517,6 +516,7 @@ def multithread_find_many(
     search_dist,
     pedigrees,
     whole_region,
+    build
 ):
     vcf = VCF(vcf_name)
     prefix = get_prefix(vcf)
@@ -557,10 +557,11 @@ def multithread_find_many(
                 pedigrees,
                 whole_region,
                 sample_dict,
+                build
             )
 
 
-def find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True):
+def find_many(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=True):
     """
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
@@ -584,6 +585,7 @@ def find_many(dnms, pedigrees, vcf_name, search_dist, threads, whole_region=True
                     search_dist,
                     pedigrees,
                     whole_region,
+                    build
                 )
             )
         else:
