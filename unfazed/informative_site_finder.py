@@ -179,12 +179,12 @@ def autophaseable(denovo, pedigrees, build):
     return True
 
 
-def find(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=True):
+def find(dnms, pedigrees, vcf_name, search_dist, threads, build, multiread_proc_min, whole_region=True):
     """
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
-    if len(dnms) > 10000:
+    if len(dnms) >= multiread_proc_min:
         return find_many(
             dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region
         )
@@ -566,7 +566,7 @@ def find_many(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_regi
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
-    samples_by_location, vars_by_sample, chrom_ranges = create_lookups(dnms)
+    samples_by_location, vars_by_sample, chrom_ranges = create_lookups(dnms, pedigrees, build)
     chroms = set([dnm["chrom"] for dnm in dnms])
 
     if threads != 1:

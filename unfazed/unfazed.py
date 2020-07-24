@@ -567,11 +567,11 @@ def unfazed(args):
         sys.exit("No phaseable variants")
     if len(svs) > 0:
         phased_svs = phase_svs(
-            svs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended
+            svs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
         )
     if len(snvs) > 0:
         phased_snvs = phase_snvs(
-            snvs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended
+            snvs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
         )
 
     all_phased = phased_snvs

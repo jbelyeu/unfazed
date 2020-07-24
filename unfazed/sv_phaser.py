@@ -166,10 +166,10 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended):
     records["_".join(key)] = record
 
 
-def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended):
+def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended, multiread_proc_min):
     # get informative sites near the breakpoints of SVs for reab-backed phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 5000, threads, build, whole_region=False
+        dnms, pedigrees, vcf, 5000, threads, build, multiread_proc_min, whole_region=False
     )
     records = {}
     if threads != 1:
@@ -291,13 +291,13 @@ def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
     records["_".join(key)] = record
 
 
-def run_cnv_phasing(dnms, pedigrees, vcf, threads, build):
+def run_cnv_phasing(dnms, pedigrees, vcf, threads, build, multithread_proc_min):
     """
     Specialized phasing for CNVs,
     using the informative sites from the region with a copy-number change
     """
     # get informative sites inside CNVs for purely SNV-based phasing
-    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, build, threads)
+    dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, threads, build, multithread_proc_min)
     records = {}
     if threads != 1:
         executor = ThreadPoolExecutor(threads)
@@ -334,9 +334,9 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads, build):
 
 
 # def phase_svs(args):
-def phase_svs(dnms, kids, pedigrees, sites, threads, build, no_extended):
-    cnv_records = run_cnv_phasing(dnms, pedigrees, sites, threads, build)
-    read_records = run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended)
+def phase_svs(dnms, kids, pedigrees, sites, threads, build, no_extended, multiread_proc_min):
+    cnv_records = run_cnv_phasing(dnms, pedigrees, sites, threads, build, multiread_proc_min)
+    read_records = run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended, multiread_proc_min)
     for key in cnv_records:
         if key not in read_records:
             read_records[key] = cnv_records[key]

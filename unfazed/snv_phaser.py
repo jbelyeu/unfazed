@@ -188,10 +188,10 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
     records["_".join(key)] = record
 
 
-def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended):
+def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended, multithread_proc_min):
     # get informative sites near SNVs for read-backed phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 5000, threads, build, whole_region=False
+        dnms, pedigrees, vcf, 5000, threads, build, multithread_proc_min, whole_region=False
     )
     records = {}
     if threads != 1:
@@ -280,5 +280,5 @@ def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
 
 
 # def phase_snvs(args):
-def phase_snvs(dnms, kids, pedigrees, sites, threads, build, no_extended):
-    return run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended)
+def phase_snvs(dnms, kids, pedigrees, sites, threads, build, no_extended, multithread_proc_min):
+    return run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended, multithread_proc_min)

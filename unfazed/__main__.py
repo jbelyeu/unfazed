@@ -123,6 +123,13 @@ def setup_args():
         action="store_true",
         default=False,
     )
+
+    parser.add_argument(
+        "--multiread-proc-min",
+        help="min number of variants perform multiple parallel reads of the sites file",
+        type=int,
+        default=1000
+    )
     return parser
 
 
