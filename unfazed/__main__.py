@@ -128,7 +128,14 @@ def setup_args():
         "--multiread-proc-min",
         help="min number of variants perform multiple parallel reads of the sites file",
         type=int,
-        default=1000
+        default=1000,
+    )
+
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        help="no logging of variant processing data",
+        action="store_true",
     )
     return parser
 

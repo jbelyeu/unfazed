@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-from __future__ import print_function
-
 # Python 2/3 compatibility
 import sys
 
@@ -71,10 +69,10 @@ def match_informative_sites(reads, informative_sites):
                 ref_parents = set()
                 alt_parents = set()
                 for match in site_matches:
-                    ref_parents.add(match['ref_parent'])
-                    alt_parents.add(match['alt_parent'])
+                    ref_parents.add(match["ref_parent"])
+                    alt_parents.add(match["alt_parent"])
                 if len(ref_parents) != 1 or len(alt_parents) != 1:
-                    continue #indicates a read that supports both parents, which doesn't work biologically
+                    continue  # indicates a read that supports both parents, which doesn't work biologically
                 match_info = {"matches": site_matches, "read": read}
                 matches[ref_alt].append(match_info)
     return matches

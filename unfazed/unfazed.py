@@ -20,6 +20,7 @@ SV_TYPES = ["DEL", "DUP", "INV", "CNV", "DUP:TANDEM", "DEL:ME", "CPX", "CTX"]
 SNV_TYPE = "POINT"
 
 labels = ["chrom", "start", "end", "kid", "vartype"]
+QUIET_MODE = False
 
 
 def read_vars_bed(bedname):
@@ -142,18 +143,23 @@ def parse_ped(ped, kids):
             fields = line.strip().split()
             if fields[1] in kids:
                 if fields[2] == "0" or fields[3] == "0":
-                    print(
-                        "Parent of sample {} missing from pedigree file, will be skipped".format(
-                            fields[1]
-                        ),
-                        file=sys.stderr,
-                    )
+                    if not QUIET_MODE:
+                        print(
+                            "Parent of sample {} missing from pedigree file, will be skipped".format(
+                                fields[1]
+                            ),
+                            file=sys.stderr,
+                        )
                     missing_parents.append(fields[1])
                     continue
                 kid_entries[fields[1]] = dict(zip(labels, fields[1:5]))
 
     for sample in kids:
-        if (sample not in kid_entries) and (sample not in missing_parents):
+        if (
+            (sample not in kid_entries)
+            and (sample not in missing_parents)
+            and not QUIET_MODE
+        ):
             print(
                 "{} missing from pedigree file, will be skipped".format(sample),
                 file=sys.stderr,
@@ -249,12 +255,14 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent_reads += read_record["dad_reads"]
             other_parent_sites += read_record["mom_sites"]
             other_parent_reads += read_record["mom_reads"]
-            if ("AMBIGUOUS_READBACKED" in evidence_types):
+            if "AMBIGUOUS_READBACKED" in evidence_types:
                 evidence_types.remove("AMBIGUOUS_READBACKED")
             evidence_types.append("ALLELE-BALANCE")
 
     elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10 * dad_cnv_site_count):
-        if (origin_parent == read_record["dad"]) and not ("READBACKED" in evidence_types):
+        if (origin_parent == read_record["dad"]) and not (
+            "READBACKED" in evidence_types
+        ):
             # this just became ambiguous because of contradictory results
             origin_parent = None
             evidence_count += dad_cnv_site_count + mom_cnv_site_count
@@ -271,10 +279,12 @@ def summarize_record(read_record, include_ambiguous, verbose):
             origin_parent_reads += read_record["mom_reads"]
             other_parent_sites += read_record["dad_sites"]
             other_parent_reads += read_record["dad_reads"]
-            if ("AMBIGUOUS_READBACKED" in evidence_types):
+            if "AMBIGUOUS_READBACKED" in evidence_types:
                 evidence_types.remove("AMBIGUOUS_READBACKED")
             evidence_types.append("ALLELE-BALANCE")
-    elif ((dad_cnv_site_count + mom_cnv_site_count) > 0) and not ("READBACKED" in evidence_types):
+    elif ((dad_cnv_site_count + mom_cnv_site_count) > 0) and not (
+        "READBACKED" in evidence_types
+    ):
         # this just became ambiguous because of contradictory results
         origin_parent = None
         evidence_count += dad_cnv_site_count + mom_cnv_site_count
@@ -505,6 +515,8 @@ def unfazed(args):
         sys.exit(
             "dnms file type is unrecognized. Must be bed, bed.gz, vcf, vcf.gz, or bcf"
         )
+    global QUIET_MODE
+    QUIET_MODE = args.quiet
 
     output_type = args.output_type if args.output_type is not None else input_type
     if output_type == "vcf" and input_type != "vcf":
@@ -523,17 +535,19 @@ def unfazed(args):
         sample = var_fields["kid"]
         if sample not in bam_names_dict:
             if not (sample in missing_samples):
-                print("missing alignment file for", sample, file=sys.stderr)
+                if not QUIET_MODE:
+                    print("missing alignment file for", sample, file=sys.stderr)
                 missing_samples.add(sample)
             continue
         elif len(bam_names_dict[sample]) != 1:
             if not (sample in duplicated_samples):
-                print(
-                    "multiple alignment files for",
-                    sample + ".",
-                    "Please specify correct alignment file using --bam-pairs",
-                    file=sys.stderr,
-                )
+                if not QUIET_MODE:
+                    print(
+                        "multiple alignment files for",
+                        sample + ".",
+                        "Please specify correct alignment file using --bam-pairs",
+                        file=sys.stderr,
+                    )
                 duplicated_samples.add(sample)
             continue
         kids.add(sample)
@@ -567,11 +581,27 @@ def unfazed(args):
         sys.exit("No phaseable variants")
     if len(svs) > 0:
         phased_svs = phase_svs(
-            svs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
+            svs,
+            kids,
+            pedigrees,
+            args.sites,
+            args.threads,
+            args.build,
+            args.no_extended,
+            args.multiread_proc_min,
+            QUIET_MODE,
         )
     if len(snvs) > 0:
         phased_snvs = phase_snvs(
-            snvs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
+            snvs,
+            kids,
+            pedigrees,
+            args.sites,
+            args.threads,
+            args.build,
+            args.no_extended,
+            args.multiread_proc_min,
+            QUIET_MODE,
         )
 
     all_phased = phased_snvs

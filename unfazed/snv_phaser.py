@@ -14,6 +14,7 @@ MILLION = 1000000
 MIN_MAPQ = 1
 STDEV_COUNT = 3
 SEX_KEY = {"male": 1, "female": 2}
+QUIET_MODE = False
 # https://www.ncbi.nlm.nih.gov/grc/human
 grch37_par1 = {
     "x": [10001, 2781479],
@@ -121,33 +122,42 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
         region["chrom"], region["start"], vcf_filehandle, sample_dict[denovo["kid"]],
     )
     if len(alts) < 1:
-        print(
-            "No usable genotype for variant {chrom}:{start}-{end}".format(**region),
-            file=sys.stderr,
-        )
+        if not QUIET_MODE:
+            print(
+                "No usable genotype for variant {chrom}:{start}-{end}".format(**region),
+                file=sys.stderr,
+            )
         return
     elif len(alts) > 1:
-        print(
-            "Too many genotypes for variant {chrom}:{start}-{end}".format(**region),
-            file=sys.stderr,
-        )
+        if not QUIET_MODE:
+            print(
+                "Too many genotypes for variant {chrom}:{start}-{end}".format(**region),
+                file=sys.stderr,
+            )
         return
     alt = alts[0]
     informative_sites = denovo["candidate_sites"]
 
     # these are reads that support the ref or alt allele of the de novo variant
     dnm_reads = collect_reads_snv(
-        denovo["bam"], region, denovo["het_sites"], ref, alt, denovo["cram_ref"], no_extended
+        denovo["bam"],
+        region,
+        denovo["het_sites"],
+        ref,
+        alt,
+        denovo["cram_ref"],
+        no_extended,
     )
     matches = match_informative_sites(dnm_reads, informative_sites)
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:
-        print(
-            "No reads overlap informative sites for variant {chrom}:{start}-{end}".format(
-                **region
-            ),
-            file=sys.stderr,
-        )
+        if not QUIET_MODE:
+            print(
+                "No reads overlap informative sites for variant {chrom}:{start}-{end}".format(
+                    **region
+                ),
+                file=sys.stderr,
+            )
         return
 
     counts = phase_by_reads(matches)
@@ -188,10 +198,20 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
     records["_".join(key)] = record
 
 
-def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended, multithread_proc_min):
+def run_read_phasing(
+    dnms, pedigrees, vcf, threads, build, no_extended, multithread_proc_min
+):
     # get informative sites near SNVs for read-backed phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 5000, threads, build, multithread_proc_min, whole_region=False
+        dnms,
+        pedigrees,
+        vcf,
+        5000,
+        threads,
+        build,
+        multithread_proc_min,
+        QUIET_MODE,
+        whole_region=False,
     )
     records = {}
     if threads != 1:
@@ -205,18 +225,25 @@ def run_read_phasing(dnms, pedigrees, vcf, threads, build, no_extended, multithr
             continue
 
         if "candidate_sites" not in denovo or len(denovo["candidate_sites"]) == 0:
-            print(
-                "No usable informative sites for variant {}:{}-{}".format(
-                    denovo["chrom"], denovo["start"], denovo["end"]
-                ),
-                file=sys.stderr,
-            )
+            if not QUIET_MODE:
+                print(
+                    "No usable informative sites for variant {}:{}-{}".format(
+                        denovo["chrom"], denovo["start"], denovo["end"]
+                    ),
+                    file=sys.stderr,
+                )
             continue
 
         if threads != 1:
             futures.append(
                 executor.submit(
-                    multithread_read_phasing, denovo, records, vcf, dad_id, mom_id, no_extended
+                    multithread_read_phasing,
+                    denovo,
+                    records,
+                    vcf,
+                    dad_id,
+                    mom_id,
+                    no_extended,
                 )
             )
         else:
@@ -280,5 +307,19 @@ def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
 
 
 # def phase_snvs(args):
-def phase_snvs(dnms, kids, pedigrees, sites, threads, build, no_extended, multithread_proc_min):
-    return run_read_phasing(dnms, pedigrees, sites, threads, build, no_extended, multithread_proc_min)
+def phase_snvs(
+    dnms,
+    kids,
+    pedigrees,
+    sites,
+    threads,
+    build,
+    no_extended,
+    multithread_proc_min,
+    quiet_mode,
+):
+    global QUIET_MODE
+    QUIET_MODE = quiet_mode
+    return run_read_phasing(
+        dnms, pedigrees, sites, threads, build, no_extended, multithread_proc_min
+    )

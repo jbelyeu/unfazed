@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-from __future__ import print_function
-
 # Python 2/3 compatibility
 import sys
 
@@ -20,7 +18,7 @@ EXTENDED_RB_READ_GOAL = 100
 def estimate_concordant_insert_len(bamfile):
     insert_sizes = []
     for i, read in enumerate(bamfile):
-        insert = abs(read.tlen-(READLEN*2))
+        insert = abs(read.tlen - (READLEN * 2))
         insert_sizes.append(insert)
 
         if i >= MILLION:
@@ -52,19 +50,20 @@ def goodread(read):
     return True
 
 
-def get_allele_at(read, mate, pos):
+def get_allele_at(read, mate, pos, var_len):
     read_ref_positions = read.get_reference_positions(full_length=True)
     if mate:
         mate_ref_positions = mate.get_reference_positions(full_length=True)
 
     if pos in read_ref_positions:
         read_pos = read_ref_positions.index(pos)
-        return read.query_sequence[read_pos]
+        if len(read.query_sequence) > read_pos + var_len:
+            return read.query_sequence[read_pos : read_pos + var_len]
     elif mate and pos in mate_ref_positions:
         mate_pos = mate_ref_positions.index(pos)
-        return mate.query_sequence[mate_pos]
-    else:
-        return False
+        if len(mate.query_sequence) > mate_pos + var_len:
+            return mate.query_sequence[mate_pos : mate_pos + var_len]
+    return False
 
 
 def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_reads):
@@ -84,7 +83,10 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                 if site["pos"] == found_pos:
                     continue
                 finder_allele = get_allele_at(
-                    fetched_reads[readname][0], fetched_reads[readname][1], site["pos"],
+                    fetched_reads[readname][0],
+                    fetched_reads[readname][1],
+                    site["pos"],
+                    1,
                 )
                 non_finder_allele = None
                 if finder_allele:
@@ -103,7 +105,7 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                         # we need to assign this read to a haplotype
                         # either the same hp as the de novo or not
                         read, mate = fetched_reads[site_readname]
-                        new_read_allele = get_allele_at(read, mate, site["pos"])
+                        new_read_allele = get_allele_at(read, mate, site["pos"], 1)
 
                         if not new_read_allele:
                             continue
@@ -220,8 +222,56 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
     return extended_grouped_reads
 
 
+def snv_match_alleles(informative_reads, read, mate, ref, alt, position):
+    """
+    This function is somewhat complex because it must handle INDELs
+    as well as SNPs
+    """
+    # find reads that support the alternate allele and reads that don't
+    ref_len = len(ref)
+    alt_len = len(alt)
+    variant_len = max(ref_len, alt_len)
+    read_allele = get_allele_at(read, mate, position, variant_len)
+
+    if not read_allele:
+        return
+    if ref_len >= alt_len:
+        if read_allele == ref:
+            # if the read allele matches the longest of the two options, it's a match
+            informative_reads["ref"].append(read)
+            if mate:
+                informative_reads["ref"].append(mate)
+        elif (
+            read_allele[:alt_len] == alt
+        ):  # alt must be shorter or equal to read_allele
+            # if no match to longest allele, match should be with prefix equal to length
+            informative_reads["alt"].append(read)
+            if mate:
+                informative_reads["alt"].append(mate)
+    else:
+        if read_allele == alt:
+            # if the read allele matches the longest of the two options, it's a match
+            informative_reads["alt"].append(read)
+            if mate:
+                informative_reads["alt"].append(mate)
+        elif (
+            read_allele[: ref_len + 1] == ref
+        ):  # ref must be shorter or equal to read_allele
+            # if no match to longest allele, match should be with prefix equal to length
+            informative_reads["ref"].append(read)
+            if mate:
+                informative_reads["ref"].append(mate)
+
+
 def collect_reads_snv(
-    bam_name, region, het_sites, ref, alt, cram_ref, no_extended, concordant_upper_len=None
+    bam_name,
+    region,
+    het_sites,
+    ref,
+    alt,
+    cram_ref,
+    no_extended,
+    concordant_upper_len=None,
 ):
     """
     given an alignment file name, a de novo SNV region,
@@ -261,26 +311,24 @@ def collect_reads_snv(
             continue
         ref_positions = read.get_reference_positions(full_length=True)
         mate_ref_positions = mate.get_reference_positions(full_length=True)
-        if ((ref_positions.count(None) > 5) or (mate_ref_positions.count(None) > 5)):
+        if (ref_positions.count(None) > 5) or (mate_ref_positions.count(None) > 5):
             continue
 
-        # find reads that support the alternate allele and reads that don't
-        read_allele = get_allele_at(read, mate, position)
-        if read_allele == ref:
-            informative_reads["ref"].append(read)
-            if mate:
-                informative_reads["ref"].append(mate)
-        elif read_allele == alt:
-            informative_reads["alt"].append(read)
-            if mate:
-                informative_reads["alt"].append(mate)
+        # checks which allele the read has and if ref or alt,
+        # adds it to the informative reads collection
+        snv_match_alleles(informative_reads, read, mate, ref, alt, position)
+
     if no_extended:
         return informative_reads
-    informative_reads = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    informative_reads = group_reads_by_haplotype(
+        bamfile, region, informative_reads, het_sites, 0
+    )
     return informative_reads
 
 
-def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len=None):
+def collect_reads_sv(
+    bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len=None
+):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
@@ -313,7 +361,9 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concord
                 chrom = "chr" + chrom
 
             bam_iter = bamfile.fetch(
-                chrom, max(0, position - concordant_upper_len), position + concordant_upper_len,
+                chrom,
+                max(0, position - concordant_upper_len),
+                position + concordant_upper_len,
             )
         for read in bam_iter:
             if not goodread(read):
@@ -324,20 +374,23 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concord
                 mate = bamfile.mate(read)
             except ValueError:
                 continue
-            insert_size = abs(read.tlen-(READLEN*2))
+            insert_size = abs(read.tlen - (READLEN * 2))
             if not goodread(mate):
                 continue
 
             if read.has_tag("SA"):
                 # if it's a splitter and the clipping begins within
                 # SPLITTER_ERR_MARGIN bases of the breaks, keep it
-                if ((position - SPLITTER_ERR_MARGIN) <= read.reference_start <= (position + SPLITTER_ERR_MARGIN) 
-                    or (position - SPLITTER_ERR_MARGIN) <= read.reference_end <= (position + SPLITTER_ERR_MARGIN)
+                if (position - SPLITTER_ERR_MARGIN) <= read.reference_start <= (
+                    position + SPLITTER_ERR_MARGIN
+                ) or (position - SPLITTER_ERR_MARGIN) <= read.reference_end <= (
+                    position + SPLITTER_ERR_MARGIN
                 ):
                     supporting_reads.append(read)
                     supporting_reads.append(mate)
-            elif ((insert_size > concordant_upper_len)
-                    and (0.7 < abs(var_len / insert_size) < 1.3)):
+            elif (insert_size > concordant_upper_len) and (
+                0.7 < abs(var_len / insert_size) < 1.3
+            ):
                 # find mate for informative site check
                 try:
                     mate = bamfile.mate(read)
@@ -345,42 +398,54 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concord
                     continue
                 left_read_positions = [
                     min(mate.reference_start, read.reference_start),
-                    min(mate.reference_end,read.reference_end)
+                    min(mate.reference_end, read.reference_end),
                 ]
                 right_read_positions = [
                     max(mate.reference_start, read.reference_start),
-                    max(mate.reference_end,read.reference_end)
+                    max(mate.reference_end, read.reference_end),
                 ]
                 concordant_with_wiggle = int(concordant_upper_len)
-                if not ((region['start']-concordant_with_wiggle) < left_read_positions[0] < (region['start']+concordant_with_wiggle)
-                        and (region['end']-concordant_with_wiggle) < right_read_positions[0] < (region['end']+concordant_with_wiggle)):
+                if not (
+                    (region["start"] - concordant_with_wiggle)
+                    < left_read_positions[0]
+                    < (region["start"] + concordant_with_wiggle)
+                    and (region["end"] - concordant_with_wiggle)
+                    < right_read_positions[0]
+                    < (region["end"] + concordant_with_wiggle)
+                ):
                     continue
 
                 supporting_reads.append(mate)
                 supporting_reads.append(read)
-            else: #find clipped reads that aren't split alignment but still support the variant
+            else:  # find clipped reads that aren't split alignment but still support the variant
                 ref_positions = read.get_reference_positions(full_length=True)
                 if position in ref_positions:
                     region_pos = ref_positions.index(position)
-                elif position-1 in ref_positions:
-                    region_pos = ref_positions.index(position-1)
-                elif position+1 in ref_positions:
-                    region_pos = ref_positions.index(position+1)
+                elif position - 1 in ref_positions:
+                    region_pos = ref_positions.index(position - 1)
+                elif position + 1 in ref_positions:
+                    region_pos = ref_positions.index(position + 1)
                 else:
                     continue
-                if (region_pos < 2 ) or (region_pos > (len(ref_positions)-4)):
+                if (region_pos < 2) or (region_pos > (len(ref_positions) - 4)):
                     continue
-                before_positions = list(set(ref_positions[:region_pos-1]))
-                after_positions = list(set(ref_positions[region_pos+1:]))
-                #identify clipping that matches the variant
-                if (len(before_positions) == 1 and before_positions[0] is None or 
-                    len(after_positions) == 1 and after_positions[0] is None):
+                before_positions = list(set(ref_positions[: region_pos - 1]))
+                after_positions = list(set(ref_positions[region_pos + 1 :]))
+                # identify clipping that matches the variant
+                if (
+                    len(before_positions) == 1
+                    and before_positions[0] is None
+                    or len(after_positions) == 1
+                    and after_positions[0] is None
+                ):
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
     informative_reads = {"alt": supporting_reads, "ref": []}
     if no_extended:
         return informative_reads
-    informative_reads = group_reads_by_haplotype(bamfile, region, informative_reads, het_sites, 0)
+    informative_reads = group_reads_by_haplotype(
+        bamfile, region, informative_reads, het_sites, 0
+    )
     return informative_reads
 
 

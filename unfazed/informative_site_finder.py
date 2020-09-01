@@ -11,6 +11,7 @@ HET = 1
 HOM_REF = 0
 
 SEX_KEY = {"male": 1, "female": 2}
+QUIET_MODE = False
 grch37_par1 = {
     "x": [10001, 2781479],
     "y": [10001, 2781479],
@@ -179,11 +180,23 @@ def autophaseable(denovo, pedigrees, build):
     return True
 
 
-def find(dnms, pedigrees, vcf_name, search_dist, threads, build, multiread_proc_min, whole_region=True):
+def find(
+    dnms,
+    pedigrees,
+    vcf_name,
+    search_dist,
+    threads,
+    build,
+    multiread_proc_min,
+    quiet_mode,
+    whole_region=True,
+):
     """
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
+    global QUIET_MODE
+    QUIET_MODE = quiet_mode
     if len(dnms) >= multiread_proc_min:
         return find_many(
             dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region
@@ -203,7 +216,8 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, build, multiread_proc_
         missing = False
         for sample_id in [kid_id, dad_id, mom_id]:
             if sample_id not in sample_dict:
-                print("{} missing from SNV vcf/bcf", file=sys.stderr)
+                if not QUIET_MODE:
+                    print("{} missing from SNV vcf/bcf", file=sys.stderr)
                 missing = True
         if missing:
             continue
@@ -311,7 +325,7 @@ def find(dnms, pedigrees, vcf_name, search_dist, threads, build, multiread_proc_
                     continue
 
             candidate_sites.append(candidate)
-        
+
         denovo["candidate_sites"] = sorted(candidate_sites, key=lambda x: x["pos"])
         denovo["het_sites"] = sorted(het_sites, key=lambda x: x["pos"])
         dnms[i] = denovo
@@ -395,7 +409,8 @@ def get_family_indexes(kid, pedigrees, sample_dict):
     missing = False
     for sample_id in [kid, dad_id, mom_id]:
         if sample_id not in sample_dict:
-            print("{} missing from SNV bcf", file=sys.stderr)
+            if not QUIET_MODE:
+                print("{} missing from SNV bcf", file=sys.stderr)
             missing = True
     if missing:
         return None, None, None
@@ -516,7 +531,7 @@ def multithread_find_many(
     search_dist,
     pedigrees,
     whole_region,
-    build
+    build,
 ):
     vcf = VCF(vcf_name)
     prefix = get_prefix(vcf)
@@ -557,16 +572,20 @@ def multithread_find_many(
                 pedigrees,
                 whole_region,
                 sample_dict,
-                build
+                build,
             )
 
 
-def find_many(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=True):
+def find_many(
+    dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region=True
+):
     """
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
-    samples_by_location, vars_by_sample, chrom_ranges = create_lookups(dnms, pedigrees, build)
+    samples_by_location, vars_by_sample, chrom_ranges = create_lookups(
+        dnms, pedigrees, build
+    )
     chroms = set([dnm["chrom"] for dnm in dnms])
 
     if threads != 1:
@@ -585,7 +604,7 @@ def find_many(dnms, pedigrees, vcf_name, search_dist, threads, build, whole_regi
                     search_dist,
                     pedigrees,
                     whole_region,
-                    build
+                    build,
                 )
             )
         else:
