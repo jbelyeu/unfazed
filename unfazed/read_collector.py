@@ -13,7 +13,19 @@ STDEV_COUNT = 3
 READLEN = 151
 SPLITTER_ERR_MARGIN = 5
 EXTENDED_RB_READ_GOAL = 100
-
+# pysam.readthedocs.io/en/latest/api.html#pysam.AlignedSegment.cigartuples
+CIGAR_MAP = {
+        0: "M",
+        1: "I",
+        2: "D",
+        3: "N",
+        4: "S",
+        5: "H",
+        6: "P",
+        7: "=",
+        8: "X",
+        9: "B",
+}
 
 def estimate_concordant_insert_len(bamfile):
     insert_sizes = []
@@ -221,11 +233,38 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
                 extended_grouped_reads[haplotype].append(read)
     return extended_grouped_reads
 
+def indel_match_alleles(informative_reads, read, mate, ref, alt, position):
+    """
+    Assume the alleles are different lengths (INDEL case only)
+    """
+    var_len = max(len(ref), len(alt))
+    read_ref_positions = read.get_reference_positions(full_length=True)
+    
+    if position in read_ref_positions:
+        read_pos = read_ref_positions.index(position)
+    else:
+        return
+    dist_to_allele = read_pos
+    operations = []
+    for tup in read.cigartuples:
+        operations += [CIGAR_MAP[tup[0]] for x in range(tup[1])]
+    variant_ops = operations[read_pos:read_pos+var_len]
+    if "I" in variant_ops or "D" in variant_ops:
+        informative_reads["alt"].append(read)
+        if mate:
+            informative_reads["alt"].append(mate)
+    elif 7 < read_pos < (7-len(read_ref_positions)) :
+        informative_reads["ref"].append(read)
+        if mate:
+            informative_reads["ref"].append(mate)
+
 
 def snv_match_alleles(informative_reads, read, mate, ref, alt, position):
     """
     This function is somewhat complex because it must handle INDELs
     as well as SNPs
+
+    UPDATE: can now assume both alleles are the same length
     """
     # find reads that support the alternate allele and reads that don't
     ref_len = len(ref)
@@ -316,7 +355,10 @@ def collect_reads_snv(
 
         # checks which allele the read has and if ref or alt,
         # adds it to the informative reads collection
-        snv_match_alleles(informative_reads, read, mate, ref, alt, position)
+        if len(ref) == len(alt):
+            snv_match_alleles(informative_reads, read, mate, ref, alt, position)
+        else:
+            indel_match_alleles(informative_reads, read, mate, ref, alt, position)
 
     if no_extended:
         return informative_reads
