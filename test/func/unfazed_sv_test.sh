@@ -69,7 +69,7 @@ run phase_sv_bed_to_bed \
         -o bed\
         --verbose \
         --bam-pairs "NA12878":$bam
-if [ $phase_sv_vcf_to_bed ]; then
+if [ $phase_sv_bed_to_bed ]; then
     assert_exit_code 0
     assert_in_stdout '#chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types	origin_parent_sites'
     assert_in_stdout '22	17770349	17779108	DEL	NA12878	NA12891	NA12892	2	ALLELE-BALANCE	17773763,17774449'
