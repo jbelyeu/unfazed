@@ -316,7 +316,7 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads, build, multithread_proc_min):
     """
     # get informative sites inside CNVs for purely SNV-based phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 0, threads, build, multithread_proc_min
+        dnms, pedigrees, vcf, 0, threads, build, multithread_proc_min, QUIET_MODE
     )
     records = {}
     if threads != 1:
