@@ -13,6 +13,7 @@ STDEV_COUNT = 3
 READLEN = 151
 SPLITTER_ERR_MARGIN = 5
 EXTENDED_RB_READ_GOAL = 100
+MIN_BASE_QUAL = 20
 # pysam.readthedocs.io/en/latest/api.html#pysam.AlignedSegment.cigartuples
 CIGAR_MAP = {
         0: "M",
@@ -118,7 +119,12 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                         # either the same hp as the de novo or not
                         read, mate = fetched_reads[site_readname]
                         new_read_allele = get_allele_at(read, mate, site["pos"], 1)
-
+                        read_ref_positions = read.get_reference_positions(full_length=True)
+                        if site['pos'] not in read_ref_positions:
+                            continue
+                        read_site_pos = read_ref_positions.index(site['pos'])
+                        if read.query_qualities[read_site_pos] < MIN_BASE_QUAL:
+                            continue
                         if not new_read_allele:
                             continue
 
@@ -194,30 +200,31 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
                     fetched_reads[read.query_name] = [read, mate]
     grouped_readsets = {"ref": set(), "alt": set()}
     new_reads = {"alt": [], "ref": []}
-    for read in grouped_reads["alt"]:
-        # all the reads we have so far come from the alt allele (the dnm)
-        # so store them as a set in that index
-        # also make a list of readnames and nonreal positions for the matching algorithm
-        grouped_readsets["alt"].add(read.query_name)
-        new_reads["alt"].append([read.query_name, -1])
-        try:
-            mate = bamfile.mate(read)
-            fetched_reads[read.query_name] = [read, mate]
-            match_sites = binary_search(
-                read.reference_start, read.reference_end, het_sites
-            )
-            if len(match_sites) <= 0:
-                continue
-            if read.query_name not in read_sites:
-                read_sites[read.query_name] = []
-            if het_site["pos"] not in site_reads:
-                site_reads[het_site["pos"]] = []
+   
+    for refalt in ["ref","alt"]:
+        for read in grouped_reads[refalt]:
+            # store reads with the haplotype they match
+            # also make a list of readnames and nonreal positions for the matching algorithm
+            grouped_readsets[refalt].add(read.query_name)
+            new_reads[refalt].append([read.query_name, -1])
+            try:
+                mate = bamfile.mate(read)
+                fetched_reads[read.query_name] = [read, mate]
+                match_sites = binary_search(
+                    read.reference_start, read.reference_end, het_sites
+                )
+                if len(match_sites) <= 0:
+                    continue
+                if read.query_name not in read_sites:
+                    read_sites[read.query_name] = []
+                if het_site["pos"] not in site_reads:
+                    site_reads[het_site["pos"]] = []
 
-            for match_site in match_sites:
-                read_sites[read.query_name].append(match_site)
-                site_reads[het_site["pos"]].append(read.query_name)
-        except ValueError:
-            continue
+                for match_site in match_sites:
+                    read_sites[read.query_name].append(match_site)
+                    site_reads[het_site["pos"]].append(read.query_name)
+            except ValueError:
+                continue
 
     connected_reads = connect_reads(
         grouped_readsets, read_sites, site_reads, new_reads, fetched_reads
@@ -249,14 +256,20 @@ def indel_match_alleles(informative_reads, read, mate, ref, alt, position):
     for tup in read.cigartuples:
         operations += [CIGAR_MAP[tup[0]] for x in range(tup[1])]
     variant_ops = operations[read_pos:read_pos+var_len]
+    variant_quals = read.query_qualities[read_pos:read_pos+var_len]
+    for qual in variant_quals:
+        if qual < MIN_BASE_QUAL:
+            return
+
     if "I" in variant_ops or "D" in variant_ops:
         informative_reads["alt"].append(read)
         if mate:
             informative_reads["alt"].append(mate)
-    elif 7 < read_pos < (7-len(read_ref_positions)) :
+    elif 7 < read_pos < (len(read_ref_positions)-7) :
         informative_reads["ref"].append(read)
         if mate:
             informative_reads["ref"].append(mate)
+    
 
 
 def snv_match_alleles(informative_reads, read, mate, ref, alt, position):
