@@ -46,7 +46,7 @@ def estimate_concordant_insert_len(bamfile):
     return concordant_size
 
 
-def goodread(read):
+def goodread(read, discordant=False):
     if not read:
         return False
     if (
@@ -60,6 +60,17 @@ def goodread(read):
         or (read.next_reference_id != read.reference_id)
     ):
         return False
+    if not discordant:
+        low_quals = 0
+        for qual in read.query_qualities:
+            if qual < MIN_BASE_QUAL:
+                low_quals += 1
+        mismatches = 0
+        for operation in read.cigartuples:
+            if CIGAR_MAP[operation[0] not in ["=","M"]]:
+                mismatches += 1
+        if low_quals > 10 or mismatches > 10:
+            return False
     return True
 
 
@@ -421,7 +432,7 @@ def collect_reads_sv(
                 position + concordant_upper_len,
             )
         for read in bam_iter:
-            if not goodread(read):
+            if not goodread(read, True):
                 continue
 
             # find mate for informative site check
@@ -430,7 +441,7 @@ def collect_reads_sv(
             except ValueError:
                 continue
             insert_size = abs(read.tlen - (READLEN * 2))
-            if not goodread(mate):
+            if not goodread(mate, True):
                 continue
 
             if read.has_tag("SA"):
