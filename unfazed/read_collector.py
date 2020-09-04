@@ -33,7 +33,6 @@ def estimate_concordant_insert_len(bamfile):
     for i, read in enumerate(bamfile):
         insert = abs(read.tlen - (READLEN * 2))
         insert_sizes.append(insert)
-
         if i >= MILLION:
             break
     insert_sizes = np.array(insert_sizes)
@@ -81,10 +80,14 @@ def get_allele_at(read, mate, pos, var_len):
 
     if pos in read_ref_positions:
         read_pos = read_ref_positions.index(pos)
+        if read_pos < 4 or read_pos > (READLEN-4):
+            return False
         if len(read.query_sequence) > read_pos + var_len:
             return read.query_sequence[read_pos : read_pos + var_len]
     elif mate and pos in mate_ref_positions:
         mate_pos = mate_ref_positions.index(pos)
+        if mate_pos < 4 or mate_pos > (READLEN-4):
+            return False
         if len(mate.query_sequence) > mate_pos + var_len:
             return mate.query_sequence[mate_pos : mate_pos + var_len]
     return False
@@ -130,6 +133,8 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                         # either the same hp as the de novo or not
                         read, mate = fetched_reads[site_readname]
                         new_read_allele = get_allele_at(read, mate, site["pos"], 1)
+                        if not new_read_allele:
+                            continue
                         read_ref_positions = read.get_reference_positions(full_length=True)
                         if site['pos'] not in read_ref_positions:
                             continue
@@ -144,6 +149,7 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
                         # this read belong to the current haplotype.
                         # If it matches the non_finder allele it belong to the other haplotype
                         # otherwise it's an error
+
                         if new_read_allele == finder_allele:
                             reads_to_add[haplotype].append([site_readname, site["pos"]])
                             grouped_readsets[haplotype].add(site_readname)
@@ -161,7 +167,7 @@ def connect_reads(grouped_readsets, read_sites, site_reads, new_reads, fetched_r
     return grouped_readsets
 
 
-def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_idx):
+def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_idx, concordant_upper_len):
     """
     using the heterozygous sites to group the reads into those which come from the same
     haplotype as the de novo variant (alt) and those that don't (ref)
@@ -185,12 +191,28 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
         for i, read in enumerate(bam_iter):
             if i > EXTENDED_RB_READ_GOAL:
                 continue
-            if goodread(read):
+            insert_size = abs(read.tlen - (READLEN * 2))
+            #if it's a high-quality concordant read we might use it
+            if goodread(read) and (insert_size <= concordant_upper_len):
                 try:
                     mate = bamfile.mate(read)
                 except ValueError:
                     continue
                 if goodread(mate):
+
+                    mismatch_count = 0
+                    for tup in read.cigartuples:
+                        operation = CIGAR_MAP[tup[0]]
+                        if operation not in ["M","="]:
+                            mismatch_count += 1
+                    if mismatch_count > 5:
+                        continue
+
+                    ref_positions = read.get_reference_positions(full_length=True)
+                    mate_ref_positions = mate.get_reference_positions(full_length=True)
+                    if (ref_positions.count(None) > 5) or (mate_ref_positions.count(None) > 5):
+                        continue
+
                     read_coords = [read.reference_start, read.reference_end]
                     mate_coords = [mate.reference_start, mate.reference_end]
                     if (
@@ -334,7 +356,7 @@ def collect_reads_snv(
     alt,
     cram_ref,
     no_extended,
-    concordant_upper_len=None,
+    concordant_upper_len,
 ):
     """
     given an alignment file name, a de novo SNV region,
@@ -385,15 +407,15 @@ def collect_reads_snv(
             indel_match_alleles(informative_reads, read, mate, ref, alt, position)
 
     if no_extended:
-        return informative_reads
+        return informative_reads, concordant_upper_len
     informative_reads = group_reads_by_haplotype(
-        bamfile, region, informative_reads, het_sites, 0
+        bamfile, region, informative_reads, het_sites, 0, concordant_upper_len
     )
-    return informative_reads
+    return informative_reads, concordant_upper_len
 
 
 def collect_reads_sv(
-    bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len=None
+    bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len
 ):
     """
     given an alignment file name, a de novo SV region,
@@ -431,7 +453,11 @@ def collect_reads_sv(
                 max(0, position - concordant_upper_len),
                 position + concordant_upper_len,
             )
+        banned_reads = []
         for read in bam_iter:
+            #skip if the mate has been banned for QC issues
+            if read.query_name in banned_reads:
+                continue
             if not goodread(read, True):
                 continue
 
@@ -442,6 +468,15 @@ def collect_reads_sv(
                 continue
             insert_size = abs(read.tlen - (READLEN * 2))
             if not goodread(mate, True):
+                continue
+
+            operations = []
+            for tup in read.cigartuples:
+                operations += [CIGAR_MAP[tup[0]] for x in range(tup[1])]
+            start_matches = operations[:10].count("M") + operations[:10].count("=")
+            end_matches = operations[-10:].count("M") + operations[-10:].count("=")
+            if end_matches < 7 and start_matches < 7:
+                banned_reads.append(read.query_name)
                 continue
 
             if read.has_tag("SA"):
@@ -457,6 +492,7 @@ def collect_reads_sv(
             elif (insert_size > concordant_upper_len) and (
                 0.7 < abs(var_len / insert_size) < 1.3
             ):
+
                 # find mate for informative site check
                 try:
                     mate = bamfile.mate(read)
@@ -483,7 +519,7 @@ def collect_reads_sv(
 
                 supporting_reads.append(mate)
                 supporting_reads.append(read)
-            else:  # find clipped reads that aren't split alignment but still support the variant
+            else: # find clipped reads that aren't split alignment but still support the variant
                 ref_positions = read.get_reference_positions(full_length=True)
                 if position in ref_positions:
                     region_pos = ref_positions.index(position)
@@ -506,13 +542,18 @@ def collect_reads_sv(
                 ):
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
-    informative_reads = {"alt": supporting_reads, "ref": []}
+    filtered_supporting_reads = []
+    for read in supporting_reads:
+        if read.query_name not in banned_reads:
+            filtered_supporting_reads.append(read)
+
+    informative_reads = {"alt": filtered_supporting_reads, "ref": []}
     if no_extended:
-        return informative_reads
+        return informative_reads, concordant_upper_len
     informative_reads = group_reads_by_haplotype(
-        bamfile, region, informative_reads, het_sites, 0
+        bamfile, region, informative_reads, het_sites, 0, concordant_upper_len
     )
-    return informative_reads
+    return informative_reads, concordant_upper_len
 
 
 if __name__ == "__main__":

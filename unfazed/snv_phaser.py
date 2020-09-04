@@ -15,6 +15,7 @@ MIN_MAPQ = 1
 STDEV_COUNT = 3
 SEX_KEY = {"male": 1, "female": 2}
 QUIET_MODE = False
+CONCORDANT_UPPER_LENS = {}
 # https://www.ncbi.nlm.nih.gov/grc/human
 grch37_par1 = {
     "x": [10001, 2781479],
@@ -137,9 +138,12 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
         return
     alt = alts[0]
     informative_sites = denovo["candidate_sites"]
+    concordant_upper_len = None
+    if denovo["kid"] in CONCORDANT_UPPER_LENS:
+        concordant_upper_len = CONCORDANT_UPPER_LENS[denovo['kid']]
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads = collect_reads_snv(
+    dnm_reads,concordant_upper_len = collect_reads_snv(
         denovo["bam"],
         region,
         denovo["het_sites"],
@@ -147,7 +151,10 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
         alt,
         denovo["cram_ref"],
         no_extended,
+        concordant_upper_len
     )
+    CONCORDANT_UPPER_LENS[denovo['kid']] = concordant_upper_len
+     
     matches = match_informative_sites(dnm_reads, informative_sites)
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:

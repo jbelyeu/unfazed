@@ -257,6 +257,7 @@ def summarize_record(read_record, include_ambiguous, verbose):
             other_parent_reads += read_record["mom_reads"]
             if "AMBIGUOUS_READBACKED" in evidence_types:
                 evidence_types.remove("AMBIGUOUS_READBACKED")
+                ambig = False
             evidence_types.append("ALLELE-BALANCE")
 
     elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10 * dad_cnv_site_count):
