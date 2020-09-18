@@ -9,7 +9,6 @@ from glob import glob
 import numpy as np
 from cyvcf2 import VCF, Writer
 
-from .snv_phaser import phase_snvs
 from .sv_phaser import phase_svs
 
 HOM_ALT = 2
@@ -160,336 +159,9 @@ def parse_ped(ped, kids):
             )
     return kid_entries
 
-
-def summarize_autophased(read_record):
-    chrom = read_record["region"]["chrom"]
-    if chrom.lower().strip("chr") == "y":
-        origin_parent = read_record["dad"]
-        other_parent = read_record["mom"]
-    else:
-        origin_parent = read_record["mom"]
-        other_parent = read_record["dad"]
-
-    record = {
-        "chrom": chrom,
-        "start": int(read_record["region"]["start"]),
-        "end": int(read_record["region"]["end"]),
-        "vartype": read_record["vartype"],
-        "kid": read_record["kid"],
-        "origin_parent": origin_parent,
-        "other_parent": other_parent,
-        "evidence_count": 1,
-        "evidence_types": ["SEX-CHROM"],
-    }
-    return record
-
-
-def summarize_record(read_record, include_ambiguous, verbose):
-    if read_record["evidence_type"] == "SEX-CHROM":
-        return summarize_autophased(read_record)
-    dad_read_count = len(read_record["dad_reads"])
-    mom_read_count = len(read_record["mom_reads"])
-    origin_parent = None
-    origin_parent_sites = []
-    origin_parent_reads = []
-    evidence_count = 0
-    other_parent = None
-    other_parent_sites = []
-    other_parent_reads = []
-    evidence_types = []
-    ambig = False
-
-    # logic for readbacked phasing
-    if (dad_read_count > 0) and (dad_read_count >= 10 * mom_read_count):
-        origin_parent = read_record["dad"]
-        other_parent = read_record["mom"]
-        evidence_count = len(read_record["dad_sites"])
-        origin_parent_sites += read_record["dad_sites"]
-        origin_parent_reads += read_record["dad_reads"]
-        other_parent_sites += read_record["mom_sites"]
-        other_parent_reads += read_record["mom_reads"]
-        evidence_types.append("READBACKED")
-    elif (mom_read_count > 0) and (mom_read_count >= 10 * dad_read_count):
-        origin_parent = read_record["mom"]
-        other_parent = read_record["dad"]
-        evidence_count = len(read_record["mom_sites"])
-        origin_parent_sites += read_record["mom_sites"]
-        origin_parent_reads += read_record["mom_reads"]
-        other_parent_sites += read_record["dad_sites"]
-        other_parent_reads += read_record["dad_reads"]
-        evidence_types.append("READBACKED")
-    elif dad_read_count > 0 and mom_read_count > 0:
-        origin_parent = read_record["dad"] + "|" + read_record["mom"]
-        evidence_count = dad_read_count + mom_read_count
-        origin_parent_sites += read_record["dad_sites"]
-        origin_parent_reads += read_record["dad_reads"]
-        other_parent_sites += read_record["mom_sites"]
-        other_parent_reads += read_record["mom_reads"]
-        evidence_types.append("AMBIGUOUS_READBACKED")
-        ambig = True
-
-    # logic for cnv phasing
-    dad_cnv_site_count = len(read_record["cnv_dad_sites"])
-    mom_cnv_site_count = len(read_record["cnv_mom_sites"])
-    if (dad_cnv_site_count > 0) and (dad_cnv_site_count >= 10 * mom_cnv_site_count):
-        if origin_parent == read_record["mom"] and not ("READBACKED" in evidence_types):
-            # this just became ambiguous because of contradictory results
-            origin_parent = None
-            evidence_count += dad_cnv_site_count + mom_cnv_site_count
-            origin_parent_sites += read_record["cnv_dad_sites"]
-            other_parent_sites = read_record["cnv_mom_sites"]
-            evidence_types = ["AMBIGUOUS_BOTH"]
-            ambig = True
-        else:
-            # dad is origin
-            origin_parent = read_record["dad"]
-            other_parent = read_record["mom"]
-            evidence_count = dad_cnv_site_count
-            origin_parent_sites += read_record["cnv_dad_sites"]
-            origin_parent_reads += read_record["dad_reads"]
-            other_parent_sites += read_record["mom_sites"]
-            other_parent_reads += read_record["mom_reads"]
-            if ("AMBIGUOUS_READBACKED" in evidence_types):
-                evidence_types.remove("AMBIGUOUS_READBACKED")
-            evidence_types.append("ALLELE-BALANCE")
-
-    elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10 * dad_cnv_site_count):
-        if (origin_parent == read_record["dad"]) and not ("READBACKED" in evidence_types):
-            # this just became ambiguous because of contradictory results
-            origin_parent = None
-            evidence_count += dad_cnv_site_count + mom_cnv_site_count
-            origin_parent_sites += read_record["cnv_dad_sites"]
-            other_parent_sites += read_record["cnv_mom_sites"]
-            evidence_types = ["AMBIGUOUS_BOTH"]
-            ambig = True
-        else:
-            # mom is origin
-            origin_parent = read_record["mom"]
-            other_parent = read_record["dad"]
-            evidence_count = mom_cnv_site_count
-            origin_parent_sites += read_record["cnv_mom_sites"]
-            origin_parent_reads += read_record["mom_reads"]
-            other_parent_sites += read_record["dad_sites"]
-            other_parent_reads += read_record["dad_reads"]
-            if ("AMBIGUOUS_READBACKED" in evidence_types):
-                evidence_types.remove("AMBIGUOUS_READBACKED")
-            evidence_types.append("ALLELE-BALANCE")
-    elif ((dad_cnv_site_count + mom_cnv_site_count) > 0) and not ("READBACKED" in evidence_types):
-        # this just became ambiguous because of contradictory results
-        origin_parent = None
-        evidence_count += dad_cnv_site_count + mom_cnv_site_count
-        origin_parent_sites += read_record["cnv_dad_sites"]
-        other_parent_sites = read_record["cnv_mom_sites"]
-        evidence_types.append("AMBIGUOUS_ALLELE-BALANCE")
-        ambig = True
-
-    if (origin_parent is None or ambig) and not include_ambiguous:
-        return
-    origin_parent_sites = sorted(origin_parent_sites)
-    other_parent_sites = sorted(other_parent_sites)
-
-    origin_parent_sites = (
-        ",".join(origin_parent_sites) if len(origin_parent_sites) > 0 else "-"
-    )
-    origin_parent_reads = (
-        ",".join(origin_parent_reads) if len(origin_parent_reads) > 0 else "-"
-    )
-    other_parent_sites = (
-        ",".join(other_parent_sites) if len(other_parent_sites) > 0 else "-"
-    )
-    other_parent_reads = (
-        ",".join(other_parent_reads) if len(other_parent_reads) > 0 else "-"
-    )
-
-    merged_record = {
-        "chrom": read_record["region"]["chrom"],
-        "start": int(read_record["region"]["start"]),
-        "end": int(read_record["region"]["end"]),
-        "vartype": read_record["vartype"],
-        "kid": read_record["kid"],
-        "origin_parent": origin_parent,
-        "other_parent": other_parent,
-        "evidence_count": evidence_count,
-        "evidence_types": evidence_types,
-    }
-    if verbose:
-        merged_record["origin_parent_sites"] = origin_parent_sites
-        merged_record["origin_parent_reads"] = origin_parent_reads
-        merged_record["other_parent_sites"] = other_parent_sites
-        merged_record["other_parent_reads"] = other_parent_reads
-    return merged_record
-
-
-def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outfile):
-    vcf = VCF(in_vcf_name)
-    vcf.add_format_to_header(
-        {
-            "ID": "UOPS",
-            "Description": "Count of pieces of evidence supporting the "
-            + "unfazed-identified origin parent or `-1` if missing",
-            "Type": "Float",
-            "Number": "1",
-        }
-    )
-    vcf.add_format_to_header(
-        {
-            "ID": "UET",
-            "Description": "Unfazed evidence type: "
-            + "`0` (readbacked), "
-            + "`1` (allele-balance, for CNVs only), "
-            + "`2` (both), "
-            + "`3` (ambiguous readbacked), "
-            + "`4` (ambiguous allele-balance), "
-            + "`5` (ambiguous both), "
-            + "`6` (auto-phased sex-chromosome variant in male), or "
-            + "`-1` (missing)",
-            "Type": "Float",
-            "Number": "1",
-        }
-    )
-    writer = Writer(outfile, vcf)
-
-    for variant in vcf:
-        # keys = []
-        unfazed_gts = variant.genotypes
-        uops = []
-        uet = []
-        for i, gt in enumerate(variant.gt_types):
-            uops_entry = -1
-            uet_entry = -1
-
-            if gt in [HET, HOM_ALT]:
-                vartype = variant.INFO.get("SVTYPE")
-                if vartype is None:
-                    vartype = SNV_TYPE
-
-                key_fields = {
-                    "chrom": variant.CHROM,
-                    "start": variant.start,
-                    "end": variant.end,
-                    "sample": vcf.samples[i],
-                    "vartype": vartype,
-                }
-                key = "{chrom}_{start}_{end}_{sample}_{vartype}".format(**key_fields)
-                if key in read_records:
-                    record_summary = summarize_record(
-                        read_records[key], include_ambiguous, verbose
-                    )
-                    if record_summary is not None:
-                        origin_parent = record_summary["origin_parent"]
-                        if origin_parent == read_records[key]["dad"]:
-                            unfazed_gts[i][0] = 1
-                            unfazed_gts[i][1] = 0
-                            unfazed_gts[i][2] = True
-                        elif origin_parent == read_records[key]["mom"]:
-                            unfazed_gts[i][0] = 0
-                            unfazed_gts[i][1] = 1
-                            unfazed_gts[i][2] = True
-
-                        uops_entry = record_summary["evidence_count"]
-
-                        evidence_types = record_summary["evidence_types"]
-                        uet_entry = -1
-                        if "AMBIGUOUS_READBACKED" in evidence_types:
-                            uet_entry = 3
-                        elif "AMBIGUOUS_ALLELE-BALANCE" in evidence_types:
-                            uet_entry = 4
-                        elif "AMBIGUOUS_BOTH" in evidence_types:
-                            uet_entry = 5
-                        elif "SEX-CHROM" in evidence_types:
-                            uet_entry = 6
-                        elif (
-                            "READBACKED" in evidence_types
-                            and "ALLELE-BALANCE" in evidence_types
-                        ):
-                            uet_entry = 2
-                        elif "READBACKED" in evidence_types:
-                            uet_entry = 0
-                        elif "ALLELE-BALANCE" in evidence_types:
-                            uet_entry = 1
-
-            uops.append(uops_entry)
-            uet.append(uet_entry)
-        variant.genotypes = unfazed_gts
-        variant.set_format("UOPS", np.array(uops))
-        variant.set_format("UET", np.array(uet))
-
-        writer.write_record(variant)
-
-
-def write_bed_output(read_records, include_ambiguous, verbose, outfile):
-    header = [
-        "#chrom",
-        "start",
-        "end",
-        "vartype",
-        "kid",
-        "origin_parent",
-        "other_parent",
-        "evidence_count",
-        "evidence_types",
-    ]
-
-    template_fields = [
-        "{chrom}",
-        "{start}",
-        "{end}",
-        "{vartype}",
-        "{kid}",
-        "{origin_parent}",
-        "{other_parent}",
-        "{evidence_count}",
-        "{evidence_types}",
-    ]
-
-    if verbose:
-        header += [
-            "origin_parent_sites",
-            "origin_parent_reads",
-            "other_parent_sites",
-            "other_parent_reads",
-        ]
-
-        template_fields += [
-            "{origin_parent_sites}",
-            "{origin_parent_reads}",
-            "{other_parent_sites}",
-            "{other_parent_reads}",
-        ]
-
-    template = "\t".join(template_fields)
-    record_summaries = []
-
-    for key in read_records:
-        record_summary = summarize_record(read_records[key], include_ambiguous, verbose)
-
-        if record_summary is not None:
-            record_summaries.append(record_summary)
-
-    record_summaries = sorted(
-        record_summaries, key=lambda x: (x["chrom"], x["start"], x["end"])
-    )
-    if outfile == "/dev/stdout":
-        print("\t".join(header))
-        for record_summary in record_summaries:
-            record_summary["evidence_types"] = ",".join(
-                record_summary["evidence_types"]
-            )
-            print(template.format(**record_summary))
-    else:
-        with open(outfile, "w") as outfile_fh:
-            print("\t".join(header), file=outfile_fh)
-            for record_summary in record_summaries:
-                record_summary["evidence_types"] = ",".join(
-                    record_summary["evidence_types"]
-                )
-                print(template.format(**record_summary), file=outfile_fh)
-
-
 def unfazed(args):
     input_type = ""
     bam_names_dict = get_bam_names(args.bam_dir, args.bam_pairs, args.reference)
-    snvs = []
     svs = []
     reader = ""
     if args.dnms.endswith(".bed"):
@@ -543,17 +215,10 @@ def unfazed(args):
 
         if var_fields["vartype"] in SV_TYPES:
             svs.append(var_fields)
-        elif var_fields["vartype"] == SNV_TYPE:
-            snvs.append(var_fields)
 
     pedigrees = parse_ped(args.ped, kids)
     kids = list(pedigrees.keys())
 
-    filtered_snvs = []
-    for snv in snvs:
-        if snv["kid"] in kids:
-            filtered_snvs.append(snv)
-    snvs = filtered_snvs
     filtered_svs = []
     for sv in svs:
         if sv["kid"] in kids:
@@ -561,25 +226,10 @@ def unfazed(args):
     svs = filtered_svs
 
     phased_svs = {}
-    phased_snvs = {}
 
-    if (len(snvs) + len(svs)) == 0:
+    if (len(svs)) == 0:
         sys.exit("No phaseable variants")
     if len(svs) > 0:
         phased_svs = phase_svs(
             svs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
         )
-    if len(snvs) > 0:
-        phased_snvs = phase_snvs(
-            snvs, kids, pedigrees, args.sites, args.threads, args.build, args.no_extended, args.multiread_proc_min
-        )
-
-    all_phased = phased_snvs
-    all_phased.update(phased_svs)
-
-    if output_type == "vcf":
-        write_vcf_output(
-            args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile,
-        )
-    elif output_type == "bed":
-        write_bed_output(all_phased, args.include_ambiguous, args.verbose, args.outfile)
