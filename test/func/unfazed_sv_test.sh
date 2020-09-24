@@ -24,9 +24,7 @@ run phase_sv_vcf_to_bed \
         -d $sv_hets_vcf \
         -s $sites_vcf \
         -p $ped \
-        -o bed\
-        --verbose \
-        --bam-pairs "NA12878":$bam
+        --verbose 
 if [ $phase_sv_vcf_to_bed ]; then
     assert_exit_code 0
 fi

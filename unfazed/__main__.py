@@ -137,12 +137,6 @@ def main():
     print("\nUNFAZED v{}".format(__version__), file=sys.stderr)
     parser = setup_args()
     args = parser.parse_args()
-    if args.bam_dir is None and args.bam_pairs is None:
-        print(
-            "\nMissing required argument: --bam-dir or --bam-pairs must be set\n",
-            file=sys.stderr,
-        )
-        sys.exit(parser.print_help())
     unfazed(args)
 
 

@@ -96,42 +96,6 @@ def read_vars_vcf(vcfname):
                 }
 
 
-def get_bam_names(bam_dir, bam_pairs, cram_ref):
-    bam_dict = {}
-    cram_found = False
-    if bam_dir is not None:
-        for bam in glob(os.path.join(bam_dir, "*.bam")):
-            sample_id = os.path.splitext(os.path.basename(bam))[0]
-            if sample_id not in bam_dict:
-                bam_dict[sample_id] = set()
-            bam_dict[sample_id].add(bam)
-        for cram in glob(os.path.join(bam_dir, "*.cram")):
-            cram_found = True
-            sample_id = os.path.splitext(os.path.basename(cram))[0]
-            if sample_id not in bam_dict:
-                bam_dict[sample_id] = set()
-            bam_dict[sample_id].add(cram)
-
-    if bam_pairs is not None:
-        for bam_pair in bam_pairs:
-            sample_id, bam = bam_pair
-            if not os.path.exists(bam) or not os.path.isfile(bam):
-                sys.exit("invalid filename " + bam)
-            # only one match per id using this approach,#
-            # so overwrite anything entered previously
-            bam_dict[sample_id] = set()
-            bam_dict[sample_id].add(bam)
-            if bam[-4:] == "cram":
-                cram_found = True
-
-    if cram_found:
-        if cram_ref is None:
-            sys.exit("Missing reference file for CRAM")
-        elif not os.path.isfile(cram_ref):
-            sys.exit("Reference file is not valid")
-    return bam_dict
-
-
 def parse_ped(ped, kids):
     labels = ["kid", "dad", "mom", "sex"]
     kid_entries = {}
@@ -161,7 +125,6 @@ def parse_ped(ped, kids):
 
 def unfazed(args):
     input_type = ""
-    bam_names_dict = get_bam_names(args.bam_dir, args.bam_pairs, args.reference)
     svs = []
     reader = ""
     if args.dnms.endswith(".bed"):
@@ -193,24 +156,7 @@ def unfazed(args):
     duplicated_samples = set()
     for var_fields in reader(args.dnms):
         sample = var_fields["kid"]
-        if sample not in bam_names_dict:
-            if not (sample in missing_samples):
-                print("missing alignment file for", sample, file=sys.stderr)
-                missing_samples.add(sample)
-            continue
-        elif len(bam_names_dict[sample]) != 1:
-            if not (sample in duplicated_samples):
-                print(
-                    "multiple alignment files for",
-                    sample + ".",
-                    "Please specify correct alignment file using --bam-pairs",
-                    file=sys.stderr,
-                )
-                duplicated_samples.add(sample)
-            continue
         kids.add(sample)
-        bam = list(bam_names_dict[sample])[0]
-        var_fields["bam"] = bam
         var_fields["cram_ref"] = args.reference
 
         if var_fields["vartype"] in SV_TYPES:
