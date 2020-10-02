@@ -12,7 +12,7 @@ def run_cnv_phasing(dnms, pedigrees, vcf, threads, build, multithread_proc_min):
     # get informative sites inside CNVs for purely SNV-based phasing
     dnms_with_informative_sites = find(dnms, pedigrees, vcf, 0, threads, build, multithread_proc_min)
     for dnm in dnms_with_informative_sites:
-        if len(dnm['candidate_sites']) == 0:
+        if 'candidate_sites' in dnm and len(dnm['candidate_sites']) == 0:
             continue
         print("{}:{}-{}".format(dnm["chrom"], dnm["start"], dnm["end"]))
         sites = []
