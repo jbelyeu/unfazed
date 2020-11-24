@@ -377,6 +377,10 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concord
                     len(after_positions) == 1 and after_positions[0] is None):
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
+    #don't try to call phase with fewer than 2 supporting reads
+    if len(supporting_reads) < 2:
+        return {"alt": [], "ref": []}
+
     informative_reads = {"alt": supporting_reads, "ref": []}
     if no_extended:
         return informative_reads
