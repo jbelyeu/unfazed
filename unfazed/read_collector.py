@@ -9,21 +9,20 @@ import pysam
 
 from .site_searcher import binary_search
 
-MILLION = 1000000
-MIN_MAPQ = 1
-STDEV_COUNT = 3
-READLEN = 151
-SPLITTER_ERR_MARGIN = 5
-EXTENDED_RB_READ_GOAL = 100
+#declare globals, set in entry point calls at collect_reads_sv and collect_reads_snv
+#global MIN_MAPQ = None
+#global READLEN = None
+#global SPLITTER_ERR_MARGIN = None
+#global EXTENDED_RB_READ_GOAL = None
 
 
-def estimate_concordant_insert_len(bamfile):
+def estimate_concordant_insert_len(bamfile, insert_size_max_sample, stdevs):
     insert_sizes = []
     for i, read in enumerate(bamfile):
         insert = abs(read.tlen-(READLEN*2))
         insert_sizes.append(insert)
 
-        if i >= MILLION:
+        if i >= insert_size_max_sample:
             break
     insert_sizes = np.array(insert_sizes)
     # filter out the top .1% as weirdies
@@ -31,7 +30,7 @@ def estimate_concordant_insert_len(bamfile):
 
     frag_len = int(np.mean(insert_sizes))
     stdev = np.std(insert_sizes)
-    concordant_size = frag_len + (stdev * STDEV_COUNT)
+    concordant_size = frag_len + (stdev * stdevs)
     return concordant_size
 
 
@@ -221,7 +220,7 @@ def group_reads_by_haplotype(bamfile, region, grouped_reads, het_sites, reads_id
 
 
 def collect_reads_snv(
-    bam_name, region, het_sites, ref, alt, cram_ref, no_extended, concordant_upper_len=None
+        bam_name, region, het_sites, ref, alt, cram_ref, no_extended, insert_size_max_sample, stdevs, min_map_qual, readlen, split_error_margin, concordant_upper_len=None
 ):
     """
     given an alignment file name, a de novo SNV region,
@@ -229,13 +228,22 @@ def collect_reads_snv(
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
     """
+    global MIN_MAPQ
+    MIN_MAPQ = min_map_qual
+    global READLEN
+    READLEN = readlen
+    global SPLITTER_ERR_MARGIN
+    SPLITTER_ERR_MARGIN = split_error_margin
+    global EXTENDED_RB_READ_GOAL
+    EXTENDED_RB_READ_GOAL = insert_size_max_sample
+
     if "cram" == bam_name[-4:]:
         bamfile = pysam.AlignmentFile(bam_name, "rc", reference_filename=cram_ref)
     else:
         bamfile = pysam.AlignmentFile(bam_name, "rb")
 
     if not concordant_upper_len:
-        concordant_upper_len = estimate_concordant_insert_len(bamfile)
+        concordant_upper_len = estimate_concordant_insert_len(bamfile, insert_size_max_sample, stdevs)
 
     supporting_reads = []
     position = int(region["start"])
@@ -280,20 +288,29 @@ def collect_reads_snv(
     return informative_reads
 
 
-def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concordant_upper_len=None):
+def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, insert_size_max_sample, stdevs, min_map_qual, readlen, split_error_margin, concordant_upper_len=None):
     """
     given an alignment file name, a de novo SV region,
     and a list of heterozygous sites for haplotype grouping,
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
     """
+    global MIN_MAPQ
+    MIN_MAPQ = min_map_qual
+    global READLEN
+    READLEN = readlen
+    global SPLITTER_ERR_MARGIN
+    SPLITTER_ERR_MARGIN = split_error_margin
+    global EXTENDED_RB_READ_GOAL
+    EXTENDED_RB_READ_GOAL = insert_size_max_sample
+
     if "cram" == bam_name[-4:]:
         bamfile = pysam.AlignmentFile(bam_name, "rc", reference_filename=cram_ref)
     else:
         bamfile = pysam.AlignmentFile(bam_name, "rb")
 
     if not concordant_upper_len:
-        concordant_upper_len = estimate_concordant_insert_len(bamfile)
+        concordant_upper_len = estimate_concordant_insert_len(bamfile, insert_size_max_sample, stdevs)
 
     supporting_reads = []
     var_len = abs(float(region["end"]) - float(region["start"]))
@@ -331,7 +348,7 @@ def collect_reads_sv(bam_name, region, het_sites, cram_ref, no_extended, concord
             if read.has_tag("SA"):
                 # if it's a splitter and the clipping begins within
                 # SPLITTER_ERR_MARGIN bases of the breaks, keep it
-                if ((position - SPLITTER_ERR_MARGIN) <= read.reference_start <= (position + SPLITTER_ERR_MARGIN) 
+                if ((position - SPLITTER_ERR_MARGIN) <= read.reference_start <= (position + SPLITTER_ERR_MARGIN)
                     or (position - SPLITTER_ERR_MARGIN) <= read.reference_end <= (position + SPLITTER_ERR_MARGIN)
                 ):
                     supporting_reads.append(read)
