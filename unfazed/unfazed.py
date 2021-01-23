@@ -11,6 +11,7 @@ from cyvcf2 import VCF, Writer
 
 from .snv_phaser import phase_snvs
 from .sv_phaser import phase_svs
+from .__init__ import __version__
 
 HOM_ALT = 2
 HET = 1
@@ -333,6 +334,7 @@ def summarize_record(read_record, include_ambiguous, verbose):
 
 def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outfile):
     vcf = VCF(in_vcf_name)
+    vcf.add_to_header("##unfazed="+__version__+". Phase info in pipe-separated GT field order -> 1|0 is paternal, 0|1 is maternal")
     vcf.add_format_to_header(
         {
             "ID": "UOPS",
