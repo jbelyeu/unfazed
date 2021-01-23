@@ -242,6 +242,10 @@ def find(
                 pedigrees[denovo["kid"]]["sex"] == SEX_KEY["male"]
             ):
                 continue
+
+            #if this is a small event (SNV or INDEL), ignore candidate sites in the variant
+            if ((denovo['end']-denovo['start']) < 20) and (variant.start in range(denovo['start'],denovo['end'])):
+                continue
             genotypes = variant.gt_types
             ref_depths = variant.gt_ref_depths
             alt_depths = variant.gt_alt_depths
@@ -252,7 +256,7 @@ def find(
                 "ref_allele": variant.REF,
                 "alt_allele": variant.ALT[0],
             }
-
+            
             if (
                 (genotypes[kid_idx] == HET)
                 and is_high_quality_site(
@@ -323,7 +327,7 @@ def find(
                             unique_allele = False
                 if not unique_allele:
                     continue
-
+            
             candidate_sites.append(candidate)
 
         denovo["candidate_sites"] = sorted(candidate_sites, key=lambda x: x["pos"])
@@ -436,6 +440,9 @@ def add_good_candidate_variant(
 
     for i, denovo in enumerate(vars_by_sample[kid][chrom][pos]):
         if autophaseable(denovo, pedigrees, build):
+            continue
+        #if this is a small event (SNV or INDEL), ignore candidate sites in the variant
+        if ((denovo['end']-denovo['start']) < 20) and (variant.start in range(denovo['start'],denovo['end'])):
             continue
         genotypes = variant.gt_types
         ref_depths = variant.gt_ref_depths
