@@ -21,7 +21,6 @@ CIGAR_MAP = {
     9: "B",
 }
 
-
 def estimate_concordant_insert_len(bamfile, insert_size_max_sample, stdevs):
     insert_sizes = []
     for i, read in enumerate(bamfile):
@@ -456,6 +455,7 @@ def collect_reads_sv(
     insert_size_max_sample,
     stdevs,
     min_map_qual,
+    min_gt_qual,
     readlen,
     split_error_margin,
 ):
@@ -465,6 +465,8 @@ def collect_reads_sv(
     return the reads that support the variant as a dictionary with two lists,
     containing reads that support and reads that don't
     """
+    global MIN_BASE_QUAL
+    MIN_BASE_QUAL = min_gt_qual
     global MIN_MAPQ
     MIN_MAPQ = min_map_qual
     global READLEN
@@ -595,6 +597,7 @@ def collect_reads_sv(
                 ):
                     supporting_reads.append(mate)
                     supporting_reads.append(read)
+
     filtered_supporting_reads = []
     for read in supporting_reads:
         if read.query_name not in banned_reads:
@@ -602,8 +605,7 @@ def collect_reads_sv(
 
     # don't try to call phase with fewer than 2 supporting reads
     if len(filtered_supporting_reads) < 2:
-        return {"alt": [], "ref": []}
-
+        return {"alt": [], "ref": []}, concordant_upper_len
     informative_reads = {"alt": filtered_supporting_reads, "ref": []}
     if no_extended:
         return informative_reads, concordant_upper_len
