@@ -115,6 +115,7 @@ def multithread_read_phasing(
     insert_size_max_sample,
     stdevs,
     min_map_qual,
+    min_gt_qual,
     readlen,
     split_error_margin,
 ):
@@ -128,7 +129,7 @@ def multithread_read_phasing(
         concordant_upper_len = CONCORDANT_UPPER_LENS[denovo["kid"]]
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads = collect_reads_sv(
+    dnm_reads,concordant_upper_len = collect_reads_sv(
         denovo["bam"],
         region,
         denovo["het_sites"],
@@ -138,6 +139,7 @@ def multithread_read_phasing(
         insert_size_max_sample,
         stdevs,
         min_map_qual,
+        min_gt_qual,
         readlen,
         split_error_margin,
     )
@@ -261,6 +263,7 @@ def run_read_phasing(
                     insert_size_max_sample,
                     stdevs,
                     min_map_qual,
+                    min_gt_qual,
                     readlen,
                     split_error_margin,
                 )
@@ -275,6 +278,7 @@ def run_read_phasing(
                 insert_size_max_sample,
                 stdevs,
                 min_map_qual,
+                min_gt_qual,
                 readlen,
                 split_error_margin,
             )
