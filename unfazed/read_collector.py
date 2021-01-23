@@ -385,7 +385,8 @@ def collect_reads_snv(
         bam_iter = bamfile.fetch(chrom, position, position + 1)
     informative_reads = {"alt": supporting_reads, "ref": []}
     for read in bam_iter:
-        if not goodread(read):
+        insert_size = abs(read.tlen - (READLEN * 2))
+        if not goodread(read) or (insert_size > concordant_upper_len):
             continue
         # find mate for informative site check
         try:
@@ -397,6 +398,16 @@ def collect_reads_snv(
         ref_positions = read.get_reference_positions(full_length=True)
         mate_ref_positions = mate.get_reference_positions(full_length=True)
         if (ref_positions.count(None) > 5) or (mate_ref_positions.count(None) > 5):
+            continue
+        read_coords = [read.reference_start, read.reference_end]
+        mate_coords = [mate.reference_start, mate.reference_end]
+        if (
+            mate_coords[0] <= read_coords[0] <= mate_coords[1]
+            or mate_coords[0] <= read_coords[1] <= mate_coords[1]
+        ):
+            # this means the mate pairs overlap each other,
+            # which is not biologically possible
+            # and is a sign of an alignment error
             continue
 
         # checks which allele the read has and if ref or alt,
