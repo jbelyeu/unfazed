@@ -8,9 +8,6 @@ from .informative_site_finder import find
 from .read_collector import collect_reads_sv
 from .site_searcher import match_informative_sites
 
-MILLION = 1000000
-MIN_MAPQ = 1
-STDEV_COUNT = 3
 SEX_KEY = {"male": 1, "female": 2}
 QUIET_MODE = False
 CONCORDANT_UPPER_LENS = {}
@@ -109,7 +106,18 @@ def phase_by_snvs(informative_sites):
     return origin_parent_data
 
 
-def multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended):
+def multithread_read_phasing(
+    denovo,
+    records,
+    dad_id,
+    mom_id,
+    no_extended,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    readlen,
+    split_error_margin,
+):
     region = {
         "chrom": denovo["chrom"],
         "start": denovo["start"],
@@ -117,13 +125,23 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended):
     }
     concordant_upper_len = None
     if denovo["kid"] in CONCORDANT_UPPER_LENS:
-        concordant_upper_len = CONCORDANT_UPPER_LENS[denovo['kid']]
+        concordant_upper_len = CONCORDANT_UPPER_LENS[denovo["kid"]]
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads, concordant_upper_len = collect_reads_sv(
-        denovo["bam"], region, denovo["het_sites"], denovo["cram_ref"], no_extended, concordant_upper_len
+    dnm_reads = collect_reads_sv(
+        denovo["bam"],
+        region,
+        denovo["het_sites"],
+        denovo["cram_ref"],
+        no_extended,
+        concordant_upper_len,
+        insert_size_max_sample,
+        stdevs,
+        min_map_qual,
+        readlen,
+        split_error_margin,
     )
-    CONCORDANT_UPPER_LENS[denovo['kid']] = concordant_upper_len
+    CONCORDANT_UPPER_LENS[denovo["kid"]] = concordant_upper_len
     matches = match_informative_sites(dnm_reads, denovo["candidate_sites"])
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:
@@ -175,18 +193,40 @@ def multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended):
 
 
 def run_read_phasing(
-    dnms, pedigrees, vcf, threads, build, no_extended, multiread_proc_min
+    dnms,
+    pedigrees,
+    vcf,
+    threads,
+    build,
+    no_extended,
+    multiread_proc_min,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
+    search_dist,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    readlen,
+    split_error_margin,
 ):
     # get informative sites near the breakpoints of SVs for reab-backed phasing
     dnms_with_informative_sites = find(
         dnms,
         pedigrees,
         vcf,
-        5000,
+        search_dist,
         threads,
         build,
         multiread_proc_min,
         QUIET_MODE,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
         whole_region=False,
     )
     records = {}
@@ -218,10 +258,26 @@ def run_read_phasing(
                     dad_id,
                     mom_id,
                     no_extended,
+                    insert_size_max_sample,
+                    stdevs,
+                    min_map_qual,
+                    readlen,
+                    split_error_margin,
                 )
             )
         else:
-            multithread_read_phasing(denovo, records, dad_id, mom_id, no_extended)
+            multithread_read_phasing(
+                denovo,
+                records,
+                dad_id,
+                mom_id,
+                no_extended,
+                insert_size_max_sample,
+                stdevs,
+                min_map_qual,
+                readlen,
+                split_error_margin,
+            )
     if threads != 1:
         wait(futures)
     return records
@@ -315,14 +371,38 @@ def autophase(denovo, pedigrees, records, dad_id, mom_id, build):
     records["_".join(key)] = record
 
 
-def run_cnv_phasing(dnms, pedigrees, vcf, threads, build, multithread_proc_min):
+def run_cnv_phasing(
+    dnms,
+    pedigrees,
+    vcf,
+    threads,
+    build,
+    multithread_proc_min,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
+):
     """
     Specialized phasing for CNVs,
     using the informative sites from the region with a copy-number change
     """
     # get informative sites inside CNVs for purely SNV-based phasing
     dnms_with_informative_sites = find(
-        dnms, pedigrees, vcf, 0, threads, build, multithread_proc_min, QUIET_MODE
+        dnms,
+        pedigrees,
+        vcf,
+        0,
+        threads,
+        build,
+        multithread_proc_min,
+        QUIET_MODE,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
     )
     records = {}
     if threads != 1:
@@ -371,14 +451,52 @@ def phase_svs(
     no_extended,
     multiread_proc_min,
     quiet_mode,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
+    search_dist,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    readlen,
+    split_error_margin,
 ):
     global QUIET_MODE
     QUIET_MODE = quiet_mode
     cnv_records = run_cnv_phasing(
-        dnms, pedigrees, sites, threads, build, multiread_proc_min
+        dnms,
+        pedigrees,
+        sites,
+        threads,
+        build,
+        multiread_proc_min,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
     )
     read_records = run_read_phasing(
-        dnms, pedigrees, sites, threads, build, no_extended, multiread_proc_min
+        dnms,
+        pedigrees,
+        sites,
+        threads,
+        build,
+        no_extended,
+        multiread_proc_min,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
+        search_dist,
+        insert_size_max_sample,
+        stdevs,
+        min_map_qual,
+        readlen,
+        split_error_margin,
     )
     for key in cnv_records:
         if key not in read_records:

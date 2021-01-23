@@ -10,9 +10,6 @@ from .informative_site_finder import find, get_prefix
 from .read_collector import collect_reads_snv
 from .site_searcher import match_informative_sites
 
-MILLION = 1000000
-MIN_MAPQ = 1
-STDEV_COUNT = 3
 SEX_KEY = {"male": 1, "female": 2}
 QUIET_MODE = False
 CONCORDANT_UPPER_LENS = {}
@@ -108,7 +105,20 @@ def get_refalt(chrom, pos, vcf_filehandle, kid_idx):
     return ref, alts
 
 
-def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
+def multithread_read_phasing(
+    denovo,
+    records,
+    vcf,
+    dad_id,
+    mom_id,
+    no_extended,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    min_gt_qual,
+    readlen,
+    split_error_margin,
+):
     vcf_filehandle = VCF(vcf)
     sample_dict = dict(zip(vcf_filehandle.samples, range(len(vcf_filehandle.samples))))
 
@@ -120,7 +130,10 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
     if denovo["kid"] not in sample_dict:
         return
     ref, alts = get_refalt(
-        region["chrom"], region["start"], vcf_filehandle, sample_dict[denovo["kid"]],
+        region["chrom"],
+        region["start"],
+        vcf_filehandle,
+        sample_dict[denovo["kid"]],
     )
     if len(alts) < 1:
         if not QUIET_MODE:
@@ -140,10 +153,10 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
     informative_sites = denovo["candidate_sites"]
     concordant_upper_len = None
     if denovo["kid"] in CONCORDANT_UPPER_LENS:
-        concordant_upper_len = CONCORDANT_UPPER_LENS[denovo['kid']]
+        concordant_upper_len = CONCORDANT_UPPER_LENS[denovo["kid"]]
 
     # these are reads that support the ref or alt allele of the de novo variant
-    dnm_reads,concordant_upper_len = collect_reads_snv(
+    dnm_reads, concordant_upper_len = collect_reads_snv(
         denovo["bam"],
         region,
         denovo["het_sites"],
@@ -151,10 +164,16 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
         alt,
         denovo["cram_ref"],
         no_extended,
-        concordant_upper_len
+        concordant_upper_len,
+        insert_size_max_sample,
+        stdevs,
+        min_map_qual,
+        min_gt_qual,
+        readlen,
+        split_error_margin,
     )
-    CONCORDANT_UPPER_LENS[denovo['kid']] = concordant_upper_len
-     
+    CONCORDANT_UPPER_LENS[denovo["kid"]] = concordant_upper_len
+
     matches = match_informative_sites(dnm_reads, informative_sites)
 
     if len(matches["alt"]) <= 0 and len(matches["ref"]) <= 0:
@@ -206,18 +225,40 @@ def multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended):
 
 
 def run_read_phasing(
-    dnms, pedigrees, vcf, threads, build, no_extended, multithread_proc_min
+    dnms,
+    pedigrees,
+    vcf,
+    threads,
+    build,
+    no_extended,
+    multithread_proc_min,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
+    search_dist,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    readlen,
+    split_error_margin,
 ):
     # get informative sites near SNVs for read-backed phasing
     dnms_with_informative_sites = find(
         dnms,
         pedigrees,
         vcf,
-        5000,
+        search_dist,
         threads,
         build,
         multithread_proc_min,
         QUIET_MODE,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
         whole_region=False,
     )
     records = {}
@@ -251,10 +292,29 @@ def run_read_phasing(
                     dad_id,
                     mom_id,
                     no_extended,
+                    insert_size_max_sample,
+                    stdevs,
+                    min_map_qual,
+                    min_gt_qual,
+                    readlen,
+                    split_error_margin,
                 )
             )
         else:
-            multithread_read_phasing(denovo, records, vcf, dad_id, mom_id, no_extended)
+            multithread_read_phasing(
+                denovo,
+                records,
+                vcf,
+                dad_id,
+                mom_id,
+                no_extended,
+                insert_size_max_sample,
+                stdevs,
+                min_map_qual,
+                min_gt_qual,
+                readlen,
+                split_error_margin,
+            )
     if threads != 1:
         wait(futures)
     return records
@@ -324,9 +384,37 @@ def phase_snvs(
     no_extended,
     multithread_proc_min,
     quiet_mode,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
+    search_dist,
+    insert_size_max_sample,
+    stdevs,
+    min_map_qual,
+    readlen,
+    split_error_margin,
 ):
     global QUIET_MODE
     QUIET_MODE = quiet_mode
     return run_read_phasing(
-        dnms, pedigrees, sites, threads, build, no_extended, multithread_proc_min
+        dnms,
+        pedigrees,
+        sites,
+        threads,
+        build,
+        no_extended,
+        multithread_proc_min,
+        ab_homref,
+        ab_homalt,
+        ab_het,
+        min_gt_qual,
+        min_depth,
+        search_dist,
+        insert_size_max_sample,
+        stdevs,
+        min_map_qual,
+        readlen,
+        split_error_margin,
     )

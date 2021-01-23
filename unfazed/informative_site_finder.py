@@ -9,7 +9,6 @@ from cyvcf2 import VCF
 HOM_ALT = 3
 HET = 1
 HOM_REF = 0
-
 SEX_KEY = {"male": 1, "female": 2}
 QUIET_MODE = False
 grch37_par1 = {
@@ -77,9 +76,7 @@ def get_position(vcf, denovo, extra, whole_region):
             yield variant
 
 
-def is_high_quality_site(
-    i, ref_depths, alt_depths, genotypes, gt_quals, min_gq=20, min_depth=10
-):
+def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals):
     """
     check if the potential informative site is high quality.
     this is pretty hacky, but filters out the really cruddy variants.
@@ -90,14 +87,14 @@ def is_high_quality_site(
     gt_quals: numpy array of genotype qualities
     """
     if genotypes[i] == HOM_REF:
-        min_ab, max_ab = 0.0, 0.2
+        min_ab, max_ab = MIN_AB_HOMREF, MAX_AB_HOMREF
     elif genotypes[i] == HOM_ALT:
-        min_ab, max_ab = 0.8, 1.0
+        min_ab, max_ab = MIN_AB_HOMALT, MAX_AB_HOMALT
     elif genotypes[i] == HET:
-        min_ab, max_ab = 0.2, 0.8
-    if gt_quals[i] < min_gq:
+        min_ab, max_ab = MIN_AB_HET, MAX_AB_HET
+    if gt_quals[i] < MIN_GT_QUAL:
         return False
-    if (ref_depths[i] + alt_depths[i]) < min_depth:
+    if (ref_depths[i] + alt_depths[i]) < MIN_DEPTH:
         return False
 
     allele_bal = float(alt_depths[i] / float(ref_depths[i] + alt_depths[i]))
@@ -107,7 +104,9 @@ def is_high_quality_site(
     return False
 
 
-def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
+def get_kid_allele(
+    denovo, genotypes, ref_depths, alt_depths, kid_idx, dad_idx, mom_idx
+):
     kid_allele = None
     if (denovo["vartype"] == "DEL") and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 4:
         # large deletions can be genotyped by hemizygous inheritance of informative alleles
@@ -122,7 +121,7 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
         (denovo["vartype"] == "DUP")
         and (ref_depths[kid_idx] > 2)
         and (alt_depths[kid_idx] > 2)
-        and (ref_depths[kid_idx] + alt_depths[kid_idx]) > 10
+        and (ref_depths[kid_idx] + alt_depths[kid_idx]) > MIN_DEPTH
     ):
         # large duplications can be genotyped by unbalanced het inheritance
         # of informative alleles if there's enough depth
@@ -130,7 +129,24 @@ def get_kid_allele(denovo, genotypes, ref_depths, alt_depths, kid_idx):
             kid_alt_allele_bal = alt_depths[kid_idx] / float(
                 ref_depths[kid_idx] + alt_depths[kid_idx]
             )
-            # allele balance should be about 2:1 for the dominant allele
+            dad_alt_allele_bal = alt_depths[dad_idx] / float(
+                ref_depths[dad_idx] + alt_depths[dad_idx]
+            )
+            mom_alt_allele_bal = alt_depths[mom_idx] / float(
+                ref_depths[mom_idx] + alt_depths[mom_idx]
+            )
+            # DUPs can't be phased this way if the parental shared allele is duplicated, though
+            # in first case, the dominate allele is alt and alt is duplicated, which is unphaseable
+            # in second case, the dominate allele is ref and ref is duplicated, which is unphaseable
+            if (
+                ((dad_alt_allele_bal + mom_alt_allele_bal) < 1)
+                and (kid_alt_allele_bal > 0.5)
+                or ((dad_alt_allele_bal + mom_alt_allele_bal) > 1)
+                and (kid_alt_allele_bal < 0.5)
+            ):
+                return
+
+            # allele balance must be at least 2:1 for the dominant allele
             if kid_alt_allele_bal >= 0.67:
                 # this variant came from the alt parent
                 kid_allele = "alt_parent"
@@ -187,8 +203,13 @@ def find(
     search_dist,
     threads,
     build,
-    multiread_proc_min,
+    multithread_proc_min,
     quiet_mode,
+    ab_homref,
+    ab_homalt,
+    ab_het,
+    min_gt_qual,
+    min_depth,
     whole_region=True,
 ):
     """
@@ -197,7 +218,24 @@ def find(
     """
     global QUIET_MODE
     QUIET_MODE = quiet_mode
-    if len(dnms) >= multiread_proc_min:
+    global MIN_AB_HET
+    MIN_AB_HET = ab_het[0]
+    global MIN_AB_HOMREF
+    MIN_AB_HOMREF = ab_homref[0]
+    global MIN_AB_HOMALT
+    MIN_AB_HOMALT = ab_homalt[0]
+    global MAX_AB_HET
+    MAX_AB_HET = ab_het[1]
+    global MAX_AB_HOMREF
+    MAX_AB_HOMREF = ab_homref[1]
+    global MAX_AB_HOMALT
+    MAX_AB_HOMALT = ab_homalt[1]
+    global MIN_GT_QUAL
+    MIN_GT_QUAL = min_gt_qual
+    global MIN_DEPTH
+    MIN_DEPTH = min_depth
+
+    if len(dnms) >= multithread_proc_min:
         return find_many(
             dnms, pedigrees, vcf_name, search_dist, threads, build, whole_region
         )
@@ -243,8 +281,10 @@ def find(
             ):
                 continue
 
-            #if this is a small event (SNV or INDEL), ignore candidate sites in the variant
-            if ((denovo['end']-denovo['start']) < 20) and (variant.start in range(denovo['start'],denovo['end'])):
+            # if this is a small event (SNV or INDEL), ignore candidate sites in the variant
+            if ((denovo["end"] - denovo["start"]) < 20) and (
+                variant.start in range(denovo["start"], denovo["end"])
+            ):
                 continue
             genotypes = variant.gt_types
             ref_depths = variant.gt_ref_depths
@@ -256,7 +296,7 @@ def find(
                 "ref_allele": variant.REF,
                 "alt_allele": variant.ALT[0],
             }
-            
+
             if (
                 (genotypes[kid_idx] == HET)
                 and is_high_quality_site(
@@ -277,7 +317,7 @@ def find(
 
             if whole_region and ("vartype" in denovo):
                 candidate["kid_allele"] = get_kid_allele(
-                    denovo, genotypes, ref_depths, alt_depths, kid_idx
+                    denovo, genotypes, ref_depths, alt_depths, kid_idx, dad_idx, mom_idx
                 )
                 if not candidate["kid_allele"]:
                     continue
@@ -327,7 +367,7 @@ def find(
                             unique_allele = False
                 if not unique_allele:
                     continue
-            
+
             candidate_sites.append(candidate)
 
         denovo["candidate_sites"] = sorted(candidate_sites, key=lambda x: x["pos"])
@@ -441,8 +481,10 @@ def add_good_candidate_variant(
     for i, denovo in enumerate(vars_by_sample[kid][chrom][pos]):
         if autophaseable(denovo, pedigrees, build):
             continue
-        #if this is a small event (SNV or INDEL), ignore candidate sites in the variant
-        if ((denovo['end']-denovo['start']) < 20) and (variant.start in range(denovo['start'],denovo['end'])):
+        # if this is a small event (SNV or INDEL), ignore candidate sites in the variant
+        if ((denovo["end"] - denovo["start"]) < 20) and (
+            variant.start in range(denovo["start"], denovo["end"])
+        ):
             continue
         genotypes = variant.gt_types
         ref_depths = variant.gt_ref_depths
@@ -476,7 +518,7 @@ def add_good_candidate_variant(
 
         if whole_region and ("vartype" in denovo):
             candidate["kid_allele"] = get_kid_allele(
-                denovo, genotypes, ref_depths, alt_depths, kid_idx
+                denovo, genotypes, ref_depths, alt_depths, kid_idx, dad_idx, mom_idx
             )
             if not candidate["kid_allele"]:
                 continue

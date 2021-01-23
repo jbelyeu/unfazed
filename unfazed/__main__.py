@@ -11,6 +11,8 @@ from .unfazed import unfazed
 def pair(arg):
     return [x for x in arg.split(":")]
 
+def float_pair(arg):
+    return [float(x) for x in arg.split(":")]
 
 def setup_args():
     parser = argparse.ArgumentParser(
@@ -137,6 +139,96 @@ def setup_args():
         help="no logging of variant processing data",
         action="store_true",
     )
+    
+    parser.add_argument(
+        "--min-gt-qual",
+        help="min genotype quality for informative sites",
+        type=int,
+        default=20
+    )
+
+    parser.add_argument(
+        "--min-depth",
+        help="min coverage for informative sites",
+        type=int,
+        default=10
+    )
+
+    parser.add_argument(
+        "--ab-homref",
+        help="allele balance range for homozygous reference informative sites",
+        type=float_pair,
+        default="0.0:0.2"
+    )
+
+    parser.add_argument(
+        "--ab-homalt",
+        help="allele balance range for homozygous alternate informative sites",
+        type=float_pair,
+        default="0.8:1.0"
+    )
+
+    parser.add_argument(
+        "--ab-het",
+        help="allele balance range for heterozygous informative sites",
+        type=float_pair,
+        default="0.2:0.8"
+    )
+
+    parser.add_argument(
+        "--evidence-min-ratio",
+        help="minimum ratio of evidence for a parent to provide an unambiguous call. Default 10:1",
+        type=int,
+        default="10"
+    )
+    parser.add_argument(
+        "--search-dist",
+        help="maximum search distance from variant for informative sites (in bases)",
+        type=int,
+        default=5000
+    )
+    
+    parser.add_argument(
+        "--insert-size-max-sample",
+        help="maximum number of read inserts to sample in order to estimate concordant read insert size",
+        type=int,
+        default=1000000
+    )
+
+    parser.add_argument(
+        "--min-map-qual",
+        help="minimum map quality for reads",
+        type=int,
+        default=1
+    )
+
+    parser.add_argument(
+        "--stdevs",
+        help="number of standard deviations from the mean insert length to define a discordant read",
+        type=int,
+        default=3
+    )
+    parser.add_argument(
+        "--readlen",
+        help="expected length of input reads",
+        type=int,
+        default=151
+    )
+    parser.add_argument(
+        "--split-error-margin",
+        help="margin of error for the location of split read clipping in bases",
+        type=int,
+        default=5
+    )
+
+    parser.add_argument(
+        "--max-reads",
+        help="maximum number of reads to collect for phasing a single variant",
+        type=int,
+        default=100
+    )
+
+
     return parser
 
 

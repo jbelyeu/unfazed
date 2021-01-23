@@ -9,9 +9,9 @@ from glob import glob
 import numpy as np
 from cyvcf2 import VCF, Writer
 
+from .__init__ import __version__
 from .snv_phaser import phase_snvs
 from .sv_phaser import phase_svs
-from .__init__ import __version__
 
 HOM_ALT = 2
 HET = 1
@@ -191,7 +191,7 @@ def summarize_autophased(read_record):
     return record
 
 
-def summarize_record(read_record, include_ambiguous, verbose):
+def summarize_record(read_record, include_ambiguous, verbose, evidence_min_ratio):
     if read_record["evidence_type"] == "SEX-CHROM":
         return summarize_autophased(read_record)
     dad_read_count = len(read_record["dad_reads"])
@@ -207,7 +207,7 @@ def summarize_record(read_record, include_ambiguous, verbose):
     ambig = False
 
     # logic for readbacked phasing
-    if (dad_read_count > 0) and (dad_read_count >= 10 * mom_read_count):
+    if (dad_read_count > 0) and (dad_read_count >= evidence_min_ratio * mom_read_count):
         origin_parent = read_record["dad"]
         other_parent = read_record["mom"]
         evidence_count = len(read_record["dad_sites"])
@@ -216,7 +216,9 @@ def summarize_record(read_record, include_ambiguous, verbose):
         other_parent_sites += read_record["mom_sites"]
         other_parent_reads += read_record["mom_reads"]
         evidence_types.append("READBACKED")
-    elif (mom_read_count > 0) and (mom_read_count >= 10 * dad_read_count):
+    elif (mom_read_count > 0) and (
+        mom_read_count >= evidence_min_ratio * dad_read_count
+    ):
         origin_parent = read_record["mom"]
         other_parent = read_record["dad"]
         evidence_count = len(read_record["mom_sites"])
@@ -238,7 +240,9 @@ def summarize_record(read_record, include_ambiguous, verbose):
     # logic for cnv phasing
     dad_cnv_site_count = len(read_record["cnv_dad_sites"])
     mom_cnv_site_count = len(read_record["cnv_mom_sites"])
-    if (dad_cnv_site_count > 0) and (dad_cnv_site_count >= 10 * mom_cnv_site_count):
+    if (dad_cnv_site_count > 0) and (
+        dad_cnv_site_count >= evidence_min_ratio * mom_cnv_site_count
+    ):
         if origin_parent == read_record["mom"] and not ("READBACKED" in evidence_types):
             # this just became ambiguous because of contradictory results
             origin_parent = None
@@ -261,7 +265,9 @@ def summarize_record(read_record, include_ambiguous, verbose):
                 ambig = False
             evidence_types.append("ALLELE-BALANCE")
 
-    elif (mom_cnv_site_count > 0) and (mom_cnv_site_count >= 10 * dad_cnv_site_count):
+    elif (mom_cnv_site_count > 0) and (
+        mom_cnv_site_count >= evidence_min_ratio * dad_cnv_site_count
+    ):
         if (origin_parent == read_record["dad"]) and not (
             "READBACKED" in evidence_types
         ):
@@ -332,9 +338,15 @@ def summarize_record(read_record, include_ambiguous, verbose):
     return merged_record
 
 
-def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outfile):
+def write_vcf_output(
+    in_vcf_name, read_records, include_ambiguous, verbose, outfile, evidence_min_ratio
+):
     vcf = VCF(in_vcf_name)
-    vcf.add_to_header("##unfazed="+__version__+". Phase info in pipe-separated GT field order -> 1|0 is paternal, 0|1 is maternal")
+    vcf.add_to_header(
+        "##unfazed="
+        + __version__
+        + ". Phase info in pipe-separated GT field order -> 1|0 is paternal, 0|1 is maternal"
+    )
     vcf.add_format_to_header(
         {
             "ID": "UOPS",
@@ -386,7 +398,10 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
                 key = "{chrom}_{start}_{end}_{sample}_{vartype}".format(**key_fields)
                 if key in read_records:
                     record_summary = summarize_record(
-                        read_records[key], include_ambiguous, verbose
+                        read_records[key],
+                        include_ambiguous,
+                        verbose,
+                        evidence_min_ratio,
                     )
                     if record_summary is not None:
                         origin_parent = record_summary["origin_parent"]
@@ -430,7 +445,9 @@ def write_vcf_output(in_vcf_name, read_records, include_ambiguous, verbose, outf
         writer.write_record(variant)
 
 
-def write_bed_output(read_records, include_ambiguous, verbose, outfile):
+def write_bed_output(
+    read_records, include_ambiguous, verbose, outfile, evidence_min_ratio
+):
     header = [
         "#chrom",
         "start",
@@ -474,7 +491,9 @@ def write_bed_output(read_records, include_ambiguous, verbose, outfile):
     record_summaries = []
 
     for key in read_records:
-        record_summary = summarize_record(read_records[key], include_ambiguous, verbose)
+        record_summary = summarize_record(
+            read_records[key], include_ambiguous, verbose, evidence_min_ratio
+        )
 
         if record_summary is not None:
             record_summaries.append(record_summary)
@@ -592,7 +611,17 @@ def unfazed(args):
             args.build,
             args.no_extended,
             args.multiread_proc_min,
-            QUIET_MODE,
+            args.ab_homref,
+            args.ab_homalt,
+            args.ab_het,
+            args.min_gt_qual,
+            args.min_depth,
+            args.search_dist,
+            args.insert_size_max_sample,
+            args.stdevs,
+            args.min_map_qual,
+            args.readlen,
+            args.split_error_margin,
         )
     if len(snvs) > 0:
         phased_snvs = phase_snvs(
@@ -604,7 +633,17 @@ def unfazed(args):
             args.build,
             args.no_extended,
             args.multiread_proc_min,
-            QUIET_MODE,
+            args.ab_homref,
+            args.ab_homalt,
+            args.ab_het,
+            args.min_gt_qual,
+            args.min_depth,
+            args.search_dist,
+            args.insert_size_max_sample,
+            args.stdevs,
+            args.min_map_qual,
+            args.readlen,
+            args.split_error_margin,
         )
 
     all_phased = phased_snvs
@@ -612,7 +651,18 @@ def unfazed(args):
 
     if output_type == "vcf":
         write_vcf_output(
-            args.dnms, all_phased, args.include_ambiguous, args.verbose, args.outfile,
+            args.dnms,
+            all_phased,
+            args.include_ambiguous,
+            args.verbose,
+            args.outfile,
+            args.evidence_min_ratio,
         )
     elif output_type == "bed":
-        write_bed_output(all_phased, args.include_ambiguous, args.verbose, args.outfile)
+        write_bed_output(
+            all_phased,
+            args.include_ambiguous,
+            args.verbose,
+            args.outfile,
+            args.evidence_min_ratio,
+        )
