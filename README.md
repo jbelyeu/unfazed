@@ -5,7 +5,7 @@
 Unfazed identifies the parent of origin for _de novo_ variants, accepting input from either a vcf file or bed file of variant information. Unfazed works for point mutations (SNVs and INDELs) as well as larger structural mutations. 
 
 ## How it works
-### Extended read-backed phasing
+### Extended read-backed phasing (SNV/INDEL/DEL/DUP/INV)
 Unfazed identifies 'informative sites' upstream or downstream from a _de novo_ variant, using a VCF/BCF of SNVs for the trio (the child and both parents). These informative sites are variants inherited from the parents that allow identification of the origin of the read (maternal or paternal). 
 
 Informative sites must be HET in the child and discernibly different in parents, specifically HOM_REF|HOM_ALT, HET|HOM_ALT, or HET|HOM_REF. These patterns allow identification of the parent of origin for the allele found at that site in each read spanning the region.
@@ -14,7 +14,7 @@ Extended read-backed phasing adds sensitivity by chaining reads together using m
 
 Caveat: unfazed is not a variant validation tool, and assumes variants to phase are accurate _de novo_ calls.
 
-### Allele-balance CNV phasing
+### Allele-balance CNV phasing (DUP/DEL)
 Unfazed also applies an additional phasing technique to copy-number variants (CNVs), by using the allele balance of heterozygous sites are found **inside** the copy-altered region. 
 * In a deletion, the allele of the _de novo_ CNV's origin parent disappears and therefore the site should appear to be HOM_REF for the other parent's allele (although actually hemizygous).
 * In a duplication, the allele balance of the _de novo_ CNV's origin parent should be about double in proportion to the allele from the other parent. If parents share no alleles, this is fairly simple: if the allele balance of the alelle from parent A increases relatively, that is the origin parent. If the parents share one allele (one parent being HET, the other HOMREF or HOMALT) the DUP can only be phased if the non-shared allele is duplicated, as an increase in allele balance of the shared allele could come from a duplication in either parent.
@@ -166,6 +166,8 @@ readbacked), 4 (ambiguous-allele-balance), 5 (ambiguous-both), -1 (missing).
 
 * VCF output is only possible when `--dnms` is a VCF file.
 
+* Unfazed is not effective for SV types that have neither clear discordant pair evidence nor a copy-number impact. Thus, it does not work for insertion variants (INS) or breakends (BNDs).
+
 
 #### VCF lines before annotation with unfazed:
 
@@ -232,4 +234,4 @@ Evidence counts and types in BED output match those in VCF output.
 ## Performance
 Many variants lack informative sites and are therefore can't be phased. Unfazed also makes no attempt to phase multiallelic sites (which should be very rare among _de novo_ calls). Generally a little under 30% of _de novo_ SNVs/INDELs are phaseable via unfazed, and about 50% of CNV/SV variants. These results may very by quite a bit, depending on the factors like the types of variants. For example, INDELs caused by short tandem repeats are less likely to accurately phase than other INDELs. Large CNVs are also more likely to phase than other SV types, as they are more likely to contain usable informative sites for allele-balance phasing. Unfazed has also been exclusively texted with relatively deep sequencing data (30x coverage or more) and will be less effective with lower depth sequencing.
 
-The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield diminishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended. (Expert note: running with 1 thread can often produce more informative error messages in the case of a silent failure)
+The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improve runtime; however, as the operations are bound by file IO, using more than 2 threads yields diminishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended. (Expert note: running with 1 thread can often produce more informative error messages in the case of a silent failure)
