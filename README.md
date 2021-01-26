@@ -158,8 +158,8 @@ Unfazed will accept as input either a valid VCF file of _de novo_ variants or a 
 ### VCF annotations
 Unfazed adds two tags to the FORMAT field of the VCF.
 * UOPS: support for the UOP call (count of informative sites)
-* UET: evidence type(s) for the UOP call, which may be 0:readbacked, 1:allele-balance (for CNVs only), 2:both, 3:ambiguous-A
-readbacked, 4:ambiguous-allele-balance, 5:ambiguous-both, -1:missing.
+* UET: evidence type(s) for the UOP call, which may be 0 (readbacked), 1 (allele-balance, for CNVs only), 2 (both readbacked and allele-balance), 3 (ambiguous-
+readbacked), 4 (ambiguous-allele-balance), 5 (ambiguous-both), -1 (missing).
 
 #### Important notes:
 * Unfazed replaces `/` with `|` in the GT tag for phased variants to indicate phasing, following the phase order paternal|maternal.
