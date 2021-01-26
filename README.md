@@ -1,21 +1,23 @@
 [![CircleCI](https://circleci.com/gh/jbelyeu/unfazed/tree/master.svg?style=svg)](https://circleci.com/gh/jbelyeu/unfazed/tree/master)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/unfazed/README.html)
 
-# Unfazed: phasing tool for de novo SNVs and SVs
-Unfazed identifies the parent of origin for de novo variants, accepting input from either a vcf file or bed file of variant information. Unfazed works for point mutations (SNVs and INDELs) as well as larger structural mutations.
+# Unfazed: phasing tool for _de novo_ SNVs and SVs
+Unfazed identifies the parent of origin for _de novo_ variants, accepting input from either a vcf file or bed file of variant information. Unfazed works for point mutations (SNVs and INDELs) as well as larger structural mutations. 
 
 ## How it works
 ### Extended read-backed phasing
-Unfazed identifies 'informative sites' 5kb upstream or downstream from a de novo variant, using a VCF/BCF of SNVs for the trio (the child and both parents). These informative sites are variants inherited from the parents that allow identification of the origin of the read (maternal or paternal). 
+Unfazed identifies 'informative sites' upstream or downstream from a _de novo_ variant, using a VCF/BCF of SNVs for the trio (the child and both parents). These informative sites are variants inherited from the parents that allow identification of the origin of the read (maternal or paternal). 
 
 Informative sites must be HET in the child and discernibly different in parents, specifically HOM_REF|HOM_ALT, HET|HOM_ALT, or HET|HOM_REF. These patterns allow identification of the parent of origin for the allele found at that site in each read spanning the region.
 
 Extended read-backed phasing adds sensitivity by chaining reads together using mutually overlapped heterozygous sites, i.e. if two reads have the same allele for a given het site, those reads must come from the same parent. This allows the search distance from a given de novo variant to extend farther than possible with a single read pair.
 
+Caveat: unfazed is not a variant validation tool, and assumes variants to phase are accurate _de novo_ calls.
+
 ### Allele-balance CNV phasing
-Unfazed also applies an additional phasing technique to copy-number variants (CNVs), by using the allele balance of heterozygous sites are found inside the copy-altered region. 
-* In a deletion, the allele of the de novo CNV's origin parent disappears and all sites should be HOM_REF for the other parent's allele. 
-* In a duplication, the allele balance of the de novo CNV's origin parent should be about double in proportion to the allele from the other parent.
+Unfazed also applies an additional phasing technique to copy-number variants (CNVs), by using the allele balance of heterozygous sites are found **inside** the copy-altered region. 
+* In a deletion, the allele of the _de novo_ CNV's origin parent disappears and therefore the site should appear to be HOM_REF for the other parent's allele (although actually hemizygous).
+* In a duplication, the allele balance of the _de novo_ CNV's origin parent should be about double in proportion to the allele from the other parent. If parents share no alleles, this is fairly simple: if the allele balance of the alelle from parent A increases relatively, that is the origin parent. If the parents share one allele (one parent being HET, the other HOMREF or HOMALT) the DUP can only be phased if the non-shared allele is duplicated, as an increase in allele balance of the shared allele could come from a duplication in either parent.
 
 ## How to use it 
 Unfazed is available for install from conda. Requires at least Python 3.5.
@@ -27,15 +29,24 @@ Unfazed is available for install from conda. Requires at least Python 3.5.
   
   ```
 
-UNFAZED v0.2.3
+UNFAZED v1.0.0
 usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR]
                [--bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]] [-t THREADS]
                [-o {vcf,bed}] [--include-ambiguous] [--verbose]
-               [--outfile OUTFILE] [-r REFERENCE]
+               [--outfile OUTFILE] [-r REFERENCE] [--build {37,38,na}]
+               [--no-extended] [--multiread-proc-min MULTIREAD_PROC_MIN] [-q]
+               [--min-gt-qual MIN_GT_QUAL] [--min-depth MIN_DEPTH]
+               [--ab-homref AB_HOMREF] [--ab-homalt AB_HOMALT]
+               [--ab-het AB_HET] [--evidence-min-ratio EVIDENCE_MIN_RATIO]
+               [--search-dist SEARCH_DIST]
+               [--insert-size-max-sample INSERT_SIZE_MAX_SAMPLE]
+               [--min-map-qual MIN_MAP_QUAL] [--stdevs STDEVS]
+               [--readlen READLEN] [--split-error-margin SPLIT_ERROR_MARGIN]
+               [--max-reads MAX_READS]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --version         Installed version (0.2.3)
+  -v, --version         Installed version (1.0.0)
   -d DNMS, --dnms DNMS  valid VCF OR BED file of the DNMs of interest> If BED,
                         must contain chrom, start, end, kid_id, var_type
                         columns (default: None)
@@ -70,7 +81,52 @@ optional arguments:
   -r REFERENCE, --reference REFERENCE
                         reference fasta file (required for crams) (default:
                         None)
+  --build {37,38,na}    human genome build, used to determine sex chromosome
+                        pseudoautosomal regions. If `na` option is chosen, sex
+                        chromosomes will not be auto-phased (default: 38)
+  --no-extended         do not perform extended read-based phasing (default
+                        True) (default: False)
+  --multiread-proc-min MULTIREAD_PROC_MIN
+                        min number of variants perform multiple parallel reads
+                        of the sites file (default: 1000)
+  -q, --quiet           no logging of variant processing data (default: False)
+  --min-gt-qual MIN_GT_QUAL
+                        min genotype and base quality for informative sites
+                        (default: 20)
+  --min-depth MIN_DEPTH
+                        min coverage for informative sites (default: 10)
+  --ab-homref AB_HOMREF
+                        allele balance range for homozygous reference
+                        informative sites (default: 0.0:0.2)
+  --ab-homalt AB_HOMALT
+                        allele balance range for homozygous alternate
+                        informative sites (default: 0.8:1.0)
+  --ab-het AB_HET       allele balance range for heterozygous informative
+                        sites (default: 0.2:0.8)
+  --evidence-min-ratio EVIDENCE_MIN_RATIO
+                        minimum ratio of evidence for a parent to provide an
+                        unambiguous call. Default 10:1 (default: 10)
+  --search-dist SEARCH_DIST
+                        maximum search distance from variant for informative
+                        sites (in bases) (default: 5000)
+  --insert-size-max-sample INSERT_SIZE_MAX_SAMPLE
+                        maximum number of read inserts to sample in order to
+                        estimate concordant read insert size (default:
+                        1000000)
+  --min-map-qual MIN_MAP_QUAL
+                        minimum map quality for reads (default: 1)
+  --stdevs STDEVS       number of standard deviations from the mean insert
+                        length to define a discordant read (default: 3)
+  --readlen READLEN     expected length of input reads (default: 151)
+  --split-error-margin SPLIT_ERROR_MARGIN
+                        margin of error for the location of split read
+                        clipping in bases (default: 5)
+  --max-reads MAX_READS
+                        maximum number of reads to collect for phasing a
+                        single variant (default: 100))
 ```
+
+Many of the above optional arguments consist of options for user-defined deviation from tested defaults. For example, the `--stdevs` options allow a user to alter the definition of a discordant read. By default, it is defined as a paired-end read in which the insert size is greater than 3 standard deviations above the mean, and where mean is calculated from the first million reads in an alignment file, excluding the top 0.5%. A user can decide to alter the number of standard deviations for greater or lesser sensitivity to discordant pairs, but the set defaults are used for all testing and are generally recommended.
 </details>
 
 ### A simple use case is:
@@ -97,7 +153,7 @@ unfazed\
 This will print a bed file of phased variants. The input bed file must have the following tab-separated columns: chrom, start, end, kid_id, var_type, where var_type is SNV, INDEL, POINT, DEL, DUP, INV, INS, MEI, or BND.
 
 ## Unfazed input and output
-Unfazed will accept as input either a valid VCF file of de novo variants or a BED file with fields described below. Output can be either an annotated VCF or a BED file.
+Unfazed will accept as input either a valid VCF file of _de novo_ variants or a BED file with fields described below. Output can be either an annotated VCF or a BED file.
 
 ### VCF annotations
 Unfazed adds two tags to the FORMAT field of the VCF.
@@ -174,6 +230,6 @@ Evidence counts and types in BED output match those in VCF output.
 **Ambiguous results** derive from inconsistent phasing (different parent of origin indicated by different informative sites or reads. These may indicate sequencing errors or mosaic events and will *not* be reported unless the `--include-ambiguous` argument is included.
 
 ## Performance
-Many variants lack informative sites and are therefore can't be phased. Unfazed also makes no attempt to phase multiallelic sites (which should be very rare among de novo calls). Generally a little under 30% of de novo SNVs are phaseable via unfazed, and about 50% of CNV/SV variants.
+Many variants lack informative sites and are therefore can't be phased. Unfazed also makes no attempt to phase multiallelic sites (which should be very rare among _de novo_ calls). Generally a little under 30% of _de novo_ SNVs/INDELs are phaseable via unfazed, and about 50% of CNV/SV variants. These results may very by quite a bit, depending on the factors like the types of variants. For example, INDELs caused by short tandem repeats are less likely to accurately phase than other INDELs. Large CNVs are also more likely to phase than other SV types, as they are more likely to contain usable informative sites for allele-balance phasing. Unfazed has also been exclusively texted with relatively deep sequencing data (30x coverage or more) and will be less effective with lower depth sequencing.
 
-The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield dimenishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended. (Expert note: running with 1 thread can often produce more informative error messages in the case of a silent failure)
+The runtime of unfazed is highly dependent on the size of the sites VCF, as well as the number of variants. A multithreaded approach is used to improved performance; however, as the performance is bound by file IO, more than 2 threads yield diminishing returns (and can even cause a slowdown due to race conditions). Running with 2 threads (default option) is therefore recommended. (Expert note: running with 1 thread can often produce more informative error messages in the case of a silent failure)
