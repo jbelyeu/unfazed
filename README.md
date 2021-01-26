@@ -5,7 +5,7 @@
 Unfazed identifies the parent of origin for _de novo_ variants, accepting input from either a vcf file or bed file of variant information. Unfazed works for point mutations (SNVs and INDELs) as well as larger structural mutations. 
 
 ## How it works
-### Extended read-backed phasing
+### Extended read-backed phasing (SNV/INDEL/DEL/DUP/INV)
 Unfazed identifies 'informative sites' upstream or downstream from a _de novo_ variant, using a VCF/BCF of SNVs for the trio (the child and both parents). These informative sites are variants inherited from the parents that allow identification of the origin of the read (maternal or paternal). 
 
 Informative sites must be HET in the child and discernibly different in parents, specifically HOM_REF|HOM_ALT, HET|HOM_ALT, or HET|HOM_REF. These patterns allow identification of the parent of origin for the allele found at that site in each read spanning the region.
@@ -14,7 +14,7 @@ Extended read-backed phasing adds sensitivity by chaining reads together using m
 
 Caveat: unfazed is not a variant validation tool, and assumes variants to phase are accurate _de novo_ calls.
 
-### Allele-balance CNV phasing
+### Allele-balance CNV phasing (DUP/DEL)
 Unfazed also applies an additional phasing technique to copy-number variants (CNVs), by using the allele balance of heterozygous sites are found **inside** the copy-altered region. 
 * In a deletion, the allele of the _de novo_ CNV's origin parent disappears and therefore the site should appear to be HOM_REF for the other parent's allele (although actually hemizygous).
 * In a duplication, the allele balance of the _de novo_ CNV's origin parent should be about double in proportion to the allele from the other parent. If parents share no alleles, this is fairly simple: if the allele balance of the alelle from parent A increases relatively, that is the origin parent. If the parents share one allele (one parent being HET, the other HOMREF or HOMALT) the DUP can only be phased if the non-shared allele is duplicated, as an increase in allele balance of the shared allele could come from a duplication in either parent.
@@ -165,6 +165,8 @@ readbacked), 4 (ambiguous-allele-balance), 5 (ambiguous-both), -1 (missing).
 * Unfazed replaces `/` with `|` in the GT tag for phased variants to indicate phasing, following the phase order paternal|maternal.
 
 * VCF output is only possible when `--dnms` is a VCF file.
+
+* Unfazed is not effective for SV types that have neither clear discordant pair evidence nor a copy-number impact. Thus, it does not work for insertion variants (INS) or breakends (BNDs).
 
 
 #### VCF lines before annotation with unfazed:
