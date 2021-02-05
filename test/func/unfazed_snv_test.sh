@@ -79,6 +79,38 @@ if [ $phase_snv_vcf_to_bed_multiread ]; then
     assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED	50617982'
 fi
 
+run phase_snv_vcf_to_bed_multiread1 \
+    unfazed \
+        -d $snv_hets_vcf \
+        -s $sites_vcf \
+        --quiet \
+        -p $ped \
+        -o bed\
+        -t 1\
+        --verbose \
+        --multiread-proc-min 1 \
+        --bam-pairs "NA12878":$bam
+if [ $phase_snv_vcf_to_bed_multiread1 ]; then
+    assert_exit_code 0
+    assert_in_stdout '#chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types'
+    assert_in_stdout '22	18844941	18844942	POINT	NA12878	NA12892	NA12891	1	READBACKED	18844298'
+    assert_in_stdout '22	21088145	21088146	POINT	NA12878	NA12892	NA12891	1	READBACKED	21087760'
+    assert_in_stdout '22	21141299	21141300	POINT	NA12878	NA12892	NA12891	1	READBACKED	21141433'
+    assert_in_stdout '22	30857372	30857373	POINT	NA12878	NA12891	NA12892	1	READBACKED	30856856'
+    assert_in_stdout '22	30857447	30857448	POINT	NA12878	NA12891	NA12892	1	READBACKED	30856856'
+    assert_in_stdout '22	30862399	30862400	POINT	NA12878	NA12891	NA12892	2	READBACKED	30861914,30861930'
+    assert_in_stdout '22	30864691	30864692	POINT	NA12878	NA12891	NA12892	2	READBACKED	30864609,30864791'
+    assert_in_stdout '22	36556963	36556964	POINT	NA12878	NA12892	NA12891	2	READBACKED	36556697,36556822'
+    assert_in_stdout '22	41566594	41566595	POINT	NA12878	NA12892	NA12891	1	READBACKED	41566822'
+    assert_in_stdout '22	41609689	41609690	POINT	NA12878	NA12892	NA12891	3	READBACKED	41609429,41609442,41609858'
+    assert_in_stdout '22	41613187	41613188	POINT	NA12878	NA12892	NA12891	3	READBACKED	41612540,41612542,41612964'
+    assert_in_stdout '22	41613302	41613303	POINT	NA12878	NA12892	NA12891	3	READBACKED	41612540,41612542,41612964'
+    assert_in_stdout '22	41652845	41652846	POINT	NA12878	NA12892	NA12891	2	READBACKED	41652344,41652732'
+    assert_in_stdout '22	42072911	42072912	POINT	NA12878	NA12891	NA12892	1	READBACKED	42073133'
+    assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED	50617982'
+fi
+
+
 run phase_snv_bed_to_bed \
     unfazed \
         --verbose \
