@@ -666,6 +666,7 @@ def find_many(
                 search_dist,
                 pedigrees,
                 whole_region,
+                build,
             )
     if threads != 1:
         wait(futures)
