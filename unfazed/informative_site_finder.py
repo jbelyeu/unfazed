@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from cyvcf2 import VCF
 
 HOM_ALT = 3
+GT_UNKNOWN = 2 #this isn't used, just stated for clarity
 HET = 1
 HOM_REF = 0
 SEX_KEY = {"male": 1, "female": 2}
@@ -92,6 +93,8 @@ def is_high_quality_site(i, ref_depths, alt_depths, genotypes, gt_quals):
         min_ab, max_ab = MIN_AB_HOMALT, MAX_AB_HOMALT
     elif genotypes[i] == HET:
         min_ab, max_ab = MIN_AB_HET, MAX_AB_HET
+    else: #gt is unknown
+        return False
     if gt_quals[i] < MIN_GT_QUAL:
         return False
     if (ref_depths[i] + alt_depths[i]) < MIN_DEPTH:
