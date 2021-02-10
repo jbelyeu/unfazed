@@ -18,7 +18,7 @@ HET = 1
 HOM_REF = 0
 VCF_TYPES = ["vcf", "vcf.gz", "bcf"]
 SV_TYPES = ["DEL", "DUP", "INV", "CNV", "DUP:TANDEM", "DEL:ME", "CPX", "CTX"]
-SNV_TYPE = "POINT"
+SNV_TYPES = ["POINT","SNV","INDEL"]
 
 labels = ["chrom", "start", "end", "kid", "vartype"]
 QUIET_MODE = False
@@ -37,7 +37,7 @@ def read_vars_bed(bedname):
                 )
             vartype = fields[4]
             if vartype not in SV_TYPES:
-                vartype = SNV_TYPE
+                vartype = SNV_TYPES[0]
 
             yield {
                 "chrom": fields[0],
@@ -63,7 +63,7 @@ def read_vars_bedzip(bedzipname):
 
             vartype = fields[4]
             if vartype not in SV_TYPES:
-                vartype = SNV_TYPE
+                vartype = SNV_TYPES[0]
 
             yield {
                 "chrom": fields[0],
@@ -84,7 +84,7 @@ def read_vars_vcf(vcfname):
 
         vartype = variant.INFO.get("SVTYPE")
         if vartype is None:
-            vartype = SNV_TYPE
+            vartype = SNV_TYPES[0]
 
         for i, gt in enumerate(variant.gt_types):
             if gt in [HET, HOM_ALT]:
@@ -391,7 +391,7 @@ def write_vcf_output(
             if gt in [HET, HOM_ALT]:
                 vartype = variant.INFO.get("SVTYPE")
                 if vartype is None:
-                    vartype = SNV_TYPE
+                    vartype = SNV_TYPES[0]
 
                 key_fields = {
                     "chrom": variant.CHROM,
@@ -583,9 +583,9 @@ def unfazed(args):
         var_fields["bam"] = bam
         var_fields["cram_ref"] = args.reference
 
-        if var_fields["vartype"] in SV_TYPES:
+        if var_fields["vartype"].upper() in SV_TYPES:
             svs.append(var_fields)
-        elif var_fields["vartype"] == SNV_TYPE:
+        elif var_fields["vartype"].upper() in SNV_TYPES:
             snvs.append(var_fields)
 
     pedigrees = parse_ped(args.ped, kids)
