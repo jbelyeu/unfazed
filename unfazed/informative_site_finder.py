@@ -171,7 +171,6 @@ def autophaseable(denovo, pedigrees, build):
     pseudoautosomal regions can be automatically phased to the
     dad (if Y) or mom (if x)
     """
-
     chrom = denovo["chrom"].lower().strip("chr")
     if chrom not in ["y", "x"]:
         return False
@@ -314,6 +313,8 @@ def find(
                         "alt_allele": variant.ALT[0],
                     }
                 )
+            if variant.POS == 50617983:
+                print(variant.POS)
 
             if whole_region and ("vartype" in denovo):
                 candidate["kid_allele"] = get_kid_allele(
