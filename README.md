@@ -106,7 +106,7 @@ unfazed\
   -g 38 \
   --bam-pairs a_sample:a_sample.bam
 ```
-This will print an annotated vcf file of phased variants.
+This will print an annotated vcf file of phased variants. Note that unfazed requires each input VCF to have the `GT`, `AD`, and `GQ` fields.
 
 ### Unfazed will also accept a bed file as input:
 
