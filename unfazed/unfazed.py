@@ -168,7 +168,7 @@ def parse_ped(ped, kids):
     return kid_entries
 
 
-def summarize_autophased(read_record):
+def summarize_autophased(read_record, verbose):
     chrom = read_record["region"]["chrom"]
     if chrom.lower().strip("chr") == "y":
         origin_parent = read_record["dad"]
@@ -188,12 +188,17 @@ def summarize_autophased(read_record):
         "evidence_count": 1,
         "evidence_types": ["SEX-CHROM"],
     }
+    if verbose:
+        record["origin_parent_sites"] = "NA"
+        record["origin_parent_reads"] = "NA"
+        record["other_parent_sites"] = "NA"
+        record["other_parent_reads"] = "NA"
     return record
 
 
 def summarize_record(read_record, include_ambiguous, verbose, evidence_min_ratio):
     if read_record["evidence_type"] == "SEX-CHROM":
-        return summarize_autophased(read_record)
+        return summarize_autophased(read_record, verbose)
     dad_read_count = len(read_record["dad_reads"])
     mom_read_count = len(read_record["mom_reads"])
     origin_parent = None
@@ -472,7 +477,7 @@ def write_bed_output(
         "{evidence_types}",
     ]
 
-    if verbose:
+    if verbose and "origin_parent_sites":
         header += [
             "origin_parent_sites",
             "origin_parent_reads",
@@ -501,6 +506,7 @@ def write_bed_output(
     record_summaries = sorted(
         record_summaries, key=lambda x: (x["chrom"], x["start"], x["end"])
     )
+
     if outfile == "/dev/stdout":
         print("\t".join(header))
         for record_summary in record_summaries:
