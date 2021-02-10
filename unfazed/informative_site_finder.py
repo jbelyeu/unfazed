@@ -388,9 +388,6 @@ def create_lookups(dnms, pedigrees, build):
     vars_by_sample = {}
     chrom_ranges = {}
     for denovo in dnms:
-        if autophaseable(denovo, pedigrees, build):
-            continue
-
         chrom = denovo["chrom"]
         start = int(denovo["start"])
         end = int(denovo["end"])
@@ -403,6 +400,9 @@ def create_lookups(dnms, pedigrees, build):
             chrom_ranges[chrom][0] = start
         if end > chrom_ranges[chrom][1]:
             chrom_ranges[chrom][1] = end
+
+        if autophaseable(denovo, pedigrees, build):
+            continue
 
         if sample not in vars_by_sample:
             vars_by_sample[sample] = {}
