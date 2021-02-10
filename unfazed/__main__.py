@@ -112,12 +112,13 @@ def setup_args():
         required=False,
     )
     parser.add_argument(
+        "-g",
         "--build",
         help="human genome build, used to determine sex "
         + "chromosome pseudoautosomal regions. "
-        + "If `na` option is chosen, sex chromosomes will not be auto-phased",
+        + "If `na` option is chosen, sex chromosomes will not be auto-phased. HG19/GRCh37 interchangeable",
         choices=["37", "38", "na"],
-        default="38",
+        required=True,
         type=str,
     )
 
@@ -228,6 +229,7 @@ def main():
     print("\nUNFAZED v{}".format(__version__), file=sys.stderr)
     parser = setup_args()
     args = parser.parse_args()
+    print("Genome Build: {}\n".format(args.build), file=sys.stderr)
     if args.bam_dir is None and args.bam_pairs is None:
         print(
             "\nMissing required argument: --bam-dir or --bam-pairs must be set\n",

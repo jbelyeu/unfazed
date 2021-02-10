@@ -14,6 +14,9 @@ snv_hets_bed=$data_path"trio_hets_snvs_chr22.bed"
 ped=$data_path"trio.ped"
 missing_kid_ped=$data_path"trio_missing_kid.ped"
 missing_dad_ped=$data_path"trio_missing_dad.ped"
+autophase_snv_hets_vcf=$data_path"autophase_dnm.vcf.gz"
+autophase_ped=$data_path"autophase.trio.ped"
+autophase_sites_vcf=$data_path"autophase_sites.vcf.gz"
 
 
 echo "SNV phasing tests"
@@ -26,6 +29,7 @@ run phase_snv_vcf_to_bed \
         -p $ped \
         --quiet \
         -o bed\
+        --build 38\
         --verbose \
         --bam-pairs "NA12878":$bam
 if [ $phase_snv_vcf_to_bed ]; then
@@ -48,6 +52,36 @@ if [ $phase_snv_vcf_to_bed ]; then
     assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED	50617982'
 fi
 
+run phase_snv_vcf_to_bed1 \
+    unfazed \
+        -d $snv_hets_vcf \
+        -s $sites_vcf \
+        -p $ped \
+        --quiet \
+        -o bed\
+        --build 38\
+        --verbose \
+        -t 1 \
+        --bam-pairs "NA12878":$bam
+if [ $phase_snv_vcf_to_bed1 ]; then
+    assert_exit_code 0
+    assert_in_stdout '#chrom	start	end	vartype	kid	origin_parent	other_parent	evidence_count	evidence_types	origin_parent_sites	origin_parent_reads	other_parent_sites	other_parent_reads'
+    assert_in_stdout '22	18844941	18844942	POINT	NA12878	NA12892	NA12891	1	READBACKED	18844298'
+    assert_in_stdout '22	21088145	21088146	POINT	NA12878	NA12892	NA12891	1	READBACKED	21087760'
+    assert_in_stdout '22	21141299	21141300	POINT	NA12878	NA12892	NA12891	1	READBACKED	21141433'
+    assert_in_stdout '22	30857372	30857373	POINT	NA12878	NA12891	NA12892	1	READBACKED	30856856'
+    assert_in_stdout '22	30857447	30857448	POINT	NA12878	NA12891	NA12892	1	READBACKED	30856856'
+    assert_in_stdout '22	30862399	30862400	POINT	NA12878	NA12891	NA12892	2	READBACKED	30861914,30861930'
+    assert_in_stdout '22	30864691	30864692	POINT	NA12878	NA12891	NA12892	2	READBACKED	30864609,30864791'
+    assert_in_stdout '22	36556963	36556964	POINT	NA12878	NA12892	NA12891	2	READBACKED	36556697,36556822'
+    assert_in_stdout '22	41566594	41566595	POINT	NA12878	NA12892	NA12891	1	READBACKED	41566822'
+    assert_in_stdout '22	41609689	41609690	POINT	NA12878	NA12892	NA12891	3	READBACKED	41609429,41609442,41609858'
+    assert_in_stdout '22	41613187	41613188	POINT	NA12878	NA12892	NA12891	3	READBACKED	41612540,41612542,41612964'
+    assert_in_stdout '22	41613302	41613303	POINT	NA12878	NA12892	NA12891	3	READBACKED	41612540,41612542,41612964'
+    assert_in_stdout '22	41652845	41652846	POINT	NA12878	NA12892	NA12891	2	READBACKED	41652344,41652732'
+    assert_in_stdout '22	42072911	42072912	POINT	NA12878	NA12891	NA12892	1	READBACKED	42073133'
+    assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED	50617982'
+fi
 
 run phase_snv_vcf_to_bed_multiread \
     unfazed \
@@ -56,6 +90,7 @@ run phase_snv_vcf_to_bed_multiread \
         --quiet \
         -p $ped \
         -o bed\
+        --build 38\
         --verbose \
         --multiread-proc-min 1 \
         --bam-pairs "NA12878":$bam
@@ -86,6 +121,7 @@ run phase_snv_vcf_to_bed_multiread1 \
         --quiet \
         -p $ped \
         -o bed\
+        --build 38\
         -t 1\
         --verbose \
         --multiread-proc-min 1 \
@@ -119,6 +155,7 @@ run phase_snv_bed_to_bed \
         --quiet \
         -p $ped \
         -o bed\
+        --build 38\
         --bam-pairs "NA12878":$bam
 if [ $phase_snv_bed_to_bed ]; then
     assert_exit_code 0
@@ -147,6 +184,7 @@ unfazed \
     -s $sites_vcf \
     --quiet \
     -p $ped \
+    --build 38\
     --outfile out.tmp\
     --bam-pairs "NA12878":$bam
 
@@ -257,6 +295,7 @@ run phase_snv_vcf_to_bed_ambig \
         -s $sites_vcf \
         --quiet \
         -p $ped \
+        --build 38\
         --include-ambiguous \
         --bam-pairs "NA12878":$bam
 if [ $phase_snv_vcf_to_bed_ambig ]; then
@@ -280,6 +319,36 @@ if [ $phase_snv_vcf_to_bed_ambig ]; then
     assert_in_stdout '22	50617725	50617726	POINT	NA12878	NA12891	NA12892	1	READBACKED'
 fi
 
+run autophase \
+    unfazed \
+        -d $autophase_snv_hets_vcf \
+        -s $autophase_sites_vcf \
+        -p $autophase_ped \
+        -o bed\
+        --verbose \
+        --bam-pairs "NA0000":$bam\
+        --build 37\
+        -t 1\
+if [ $autophase ]; then
+    assert_exit_code 0
+    assert_in_stdout 'X	82552997	82552998	POINT	NA0000	NA0002	NA0001	1	SEX-CHROM	NA	NA	NA	NA'
+fi
+
+run autophase_multi \
+    unfazed \
+        -d $autophase_snv_hets_vcf \
+        -s $autophase_sites_vcf \
+        -p $autophase_ped \
+        -o bed\
+        --verbose \
+        --bam-pairs "NA0000":$bam\
+        --build 37\
+        --multiread-proc-min 1 \
+        -t 1\
+if [ $autophase_multi ]; then
+    assert_exit_code 0
+    assert_in_stdout 'X	82552997	82552998	POINT	NA0000	NA0002	NA0001	1	SEX-CHROM	NA	NA	NA	NA'
+fi
 
 run missing_kid_from_ped \
     unfazed \
@@ -287,6 +356,7 @@ run missing_kid_from_ped \
         -s $sites_vcf \
         -p $missing_kid_ped \
         -o bed\
+        --build 38\
         --bam-pairs "NA12878":$bam
 if [ $missing_kid_from_ped ]; then
     assert_in_stderr "NA12878 missing from pedigree file, will be skipped"
@@ -299,6 +369,7 @@ run missing_dad_from_ped \
         -s $sites_vcf \
         -p $missing_dad_ped \
         -o bed\
+        --build 38\
         --bam-pairs "NA12878":$bam
 if [ $missing_dad_from_ped ]; then
     assert_in_stderr "Parent of sample NA12878 missing from pedigree file, will be skipped"
@@ -312,6 +383,7 @@ run invalid_output_to_vcf \
         -s $sites_vcf \
         -p $ped \
         -o vcf\
+        --build 38\
         --bam-pairs "NA12878":$bam
 if [ $invalid_output_to_vcf ]; then
     assert_in_stderr "Invalid option: --output-type is vcf, but input is not a vcf type. Rerun with \`--output-type bed\` or input dnms as one of the following: vcf, vcf.gz, bcf"
@@ -323,6 +395,7 @@ run invalid_bam \
         -s $sites_vcf \
         -p $ped \
         -o vcf\
+        --build 38\
         --bam-pairs "NA12878":"bob"
 if [ $invalid_bam ]; then
     assert_in_stderr "invalid filename bob"

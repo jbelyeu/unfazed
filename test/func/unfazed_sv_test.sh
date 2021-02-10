@@ -25,6 +25,7 @@ run phase_sv_vcf_to_bed \
         -s $sites_vcf \
         -p $ped \
         -o bed\
+        -g 38 \
         --quiet \
         --verbose \
         --bam-pairs "NA12878":$bam
@@ -68,6 +69,7 @@ run phase_sv_bed_to_bed \
         -p $ped \
         --quiet \
         -o bed\
+        -g 38 \
         --verbose \
         --bam-pairs "NA12878":$bam
 if [ $phase_sv_bed_to_bed ]; then
@@ -110,6 +112,7 @@ unfazed \
     -p $ped \
     --quiet \
     --outfile out.tmp\
+    -g 38 \
     --bam-pairs "NA12878":$bam
 
 
@@ -191,6 +194,7 @@ run phase_sv_bed_to_bed_ambig \
         --quiet \
         -p $ped \
         -o bed\
+        -g 38 \
         --verbose \
         --include-ambiguous \
         --bam-pairs "NA12878":$bam

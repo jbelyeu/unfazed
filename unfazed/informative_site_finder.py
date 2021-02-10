@@ -316,8 +316,6 @@ def find(
                         "alt_allele": variant.ALT[0],
                     }
                 )
-            if variant.POS == 50617983:
-                print(variant.POS)
 
             if whole_region and ("vartype" in denovo):
                 candidate["kid_allele"] = get_kid_allele(
@@ -388,7 +386,14 @@ def create_lookups(dnms, pedigrees, build):
     samples_by_location = {}
     vars_by_sample = {}
     chrom_ranges = {}
+    dnms_autophase = []
+    dnms_nonautophase = []
     for denovo in dnms:
+        if autophaseable(denovo, pedigrees, build):
+            dnms_autophase.append(denovo)
+            continue
+        dnms_nonautophase.append(denovo)
+
         chrom = denovo["chrom"]
         start = int(denovo["start"])
         end = int(denovo["end"])
@@ -402,8 +407,6 @@ def create_lookups(dnms, pedigrees, build):
         if end > chrom_ranges[chrom][1]:
             chrom_ranges[chrom][1] = end
 
-        if autophaseable(denovo, pedigrees, build):
-            continue
 
         if sample not in vars_by_sample:
             vars_by_sample[sample] = {}
@@ -424,7 +427,7 @@ def create_lookups(dnms, pedigrees, build):
             if end not in samples_by_location[chrom] and ((end - start) > 2):
                 samples_by_location[chrom][end] = []
             samples_by_location[chrom][end].append(sample)
-    return samples_by_location, vars_by_sample, chrom_ranges
+    return samples_by_location, vars_by_sample, chrom_ranges, dnms_autophase, dnms_nonautophase
 
 
 def get_close_vars(
@@ -636,7 +639,7 @@ def find_many(
     Given list of denovo variant positions
     a vcf_name, and the distance upstream or downstream to search, find informative sites
     """
-    samples_by_location, vars_by_sample, chrom_ranges = create_lookups(
+    samples_by_location, vars_by_sample, chrom_ranges,dnms_autophase,dnms = create_lookups(
         dnms, pedigrees, build
     )
     chroms = set([dnm["chrom"] for dnm in dnms])
@@ -689,7 +692,7 @@ def find_many(
                             denovo["het_sites"], key=lambda x: x["pos"]
                         )
                     dnms_annotated.append(denovo)
-    return dnms_annotated
+    return (dnms_annotated+dnms_autophase)
 
 
 if __name__ == "__main__":
