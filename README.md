@@ -19,6 +19,9 @@ Unfazed also applies an additional phasing technique to copy-number variants (CN
 * In a deletion, the allele of the _de novo_ CNV's origin parent disappears and therefore the site should appear to be HOM_REF for the other parent's allele (although actually hemizygous).
 * In a duplication, the allele balance of the _de novo_ CNV's origin parent should be about double in proportion to the allele from the other parent. If parents share no alleles, this is fairly simple: if the allele balance of the alelle from parent A increases relatively, that is the origin parent. If the parents share one allele (one parent being HET, the other HOMREF or HOMALT) the DUP can only be phased if the non-shared allele is duplicated, as an increase in allele balance of the shared allele could come from a duplication in either parent. Unfazed requires an allele-balance of 0.66 in favor of the duplicated allele for each informative site.
 
+### Sex-chromosome autophasing
+Variants which lie on the X chromosome in male samples can generally be automatically phased to the mother and those from the Y can be phased to the father. The pseudoautosomal region (PAR) is the exception, where the X and Y are indistinguishable. Unfazed will therefore perform read-based or allele-balance phasing for PAR variants but will automatically phase other sex chromosome variants in males. This requires genome build information, which must be specified via the `--build` parameter. Note that only human genome builds 19/37 and 38 are supported for special sex-chromosome phasing.
+
 ## How to use it 
 Unfazed is available for install from conda. Requires at least Python 3.5.
 
@@ -29,101 +32,65 @@ Unfazed is available for install from conda. Requires at least Python 3.5.
   
   ```
 
-UNFAZED v1.0.0
-usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR]
-               [--bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]] [-t THREADS]
-               [-o {vcf,bed}] [--include-ambiguous] [--verbose]
-               [--outfile OUTFILE] [-r REFERENCE] [--build {37,38,na}]
-               [--no-extended] [--multiread-proc-min MULTIREAD_PROC_MIN] [-q]
-               [--min-gt-qual MIN_GT_QUAL] [--min-depth MIN_DEPTH]
-               [--ab-homref AB_HOMREF] [--ab-homalt AB_HOMALT]
-               [--ab-het AB_HET] [--evidence-min-ratio EVIDENCE_MIN_RATIO]
-               [--search-dist SEARCH_DIST]
-               [--insert-size-max-sample INSERT_SIZE_MAX_SAMPLE]
-               [--min-map-qual MIN_MAP_QUAL] [--stdevs STDEVS]
-               [--readlen READLEN] [--split-error-margin SPLIT_ERROR_MARGIN]
-               [--max-reads MAX_READS]
+UNFAZED v1.1.0
+usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR] [--bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]] [-t THREADS] [-o {vcf,bed}] [--include-ambiguous] [--verbose]
+               [--outfile OUTFILE] [-r REFERENCE] -g {37,38,na} [--no-extended] [--multiread-proc-min MULTIREAD_PROC_MIN] [-q] [--min-gt-qual MIN_GT_QUAL]
+               [--min-depth MIN_DEPTH] [--ab-homref AB_HOMREF] [--ab-homalt AB_HOMALT] [--ab-het AB_HET] [--evidence-min-ratio EVIDENCE_MIN_RATIO]
+               [--search-dist SEARCH_DIST] [--insert-size-max-sample INSERT_SIZE_MAX_SAMPLE] [--min-map-qual MIN_MAP_QUAL] [--stdevs STDEVS] [--readlen READLEN]
+               [--split-error-margin SPLIT_ERROR_MARGIN] [--max-reads MAX_READS]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --version         Installed version (1.0.0)
-  -d DNMS, --dnms DNMS  valid VCF OR BED file of the DNMs of interest> If BED,
-                        must contain chrom, start, end, kid_id, var_type
-                        columns (default: None)
+  -v, --version         Installed version (1.1.0)
+  -d DNMS, --dnms DNMS  valid VCF OR BED file of the DNMs of interest> If BED, must contain chrom, start, end, kid_id, var_type columns (default: None)
   -s SITES, --sites SITES
-                        sorted/bgzipped/indexed VCF/BCF file of SNVs to
-                        identify informative sites. Must contain each kid and
-                        both parents (default: None)
-  -p PED, --ped PED     ped file including the kid and both parent IDs
-                        (default: None)
+                        sorted/bgzipped/indexed VCF/BCF file of SNVs to identify informative sites. Must contain each kid and both parents (default: None)
+  -p PED, --ped PED     ped file including the kid and both parent IDs (default: None)
   -b BAM_DIR, --bam-dir BAM_DIR
-                        directory where bam/cram files (named {sample_id}.bam
-                        or {sample_id}.cram) are stored for offspring. If not
-                        included, --bam-pairs must be set (default: None)
+                        directory where bam/cram files (named {sample_id}.bam or {sample_id}.cram) are stored for offspring. If not included, --bam-pairs must be set
+                        (default: None)
   --bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]
-                        space-delimited list of pairs in the format
-                        {sample_id}:{bam_path} where {sample_id} matches an
-                        offspring id from the dnm file. Can be used with
-                        --bam-dir arg, must be used in its absence (default:
-                        None)
+                        space-delimited list of pairs in the format {sample_id}:{bam_path} where {sample_id} matches an offspring id from the dnm file. Can be used with
+                        --bam-dir arg, must be used in its absence (default: None)
   -t THREADS, --threads THREADS
                         number of threads to use (default: 2)
   -o {vcf,bed}, --output-type {vcf,bed}
-                        choose output type. If --dnms is not a VCF/BCF, output
-                        must be to BED format. Defaults to match --dnms input
-                        file (default: None)
+                        choose output type. If --dnms is not a VCF/BCF, output must be to BED format. Defaults to match --dnms input file (default: None)
   --include-ambiguous   include ambiguous phasing results (default: False)
-  --verbose             print verbose output including sites and reads used
-                        for phasing. Only applies to BED output (default:
-                        False)
-  --outfile OUTFILE     name for output file. Defaults to stdout (default:
-                        /dev/stdout)
+  --verbose             print verbose output including sites and reads used for phasing. Only applies to BED output (default: False)
+  --outfile OUTFILE     name for output file. Defaults to stdout (default: /dev/stdout)
   -r REFERENCE, --reference REFERENCE
-                        reference fasta file (required for crams) (default:
-                        None)
-  --build {37,38,na}    human genome build, used to determine sex chromosome
-                        pseudoautosomal regions. If `na` option is chosen, sex
-                        chromosomes will not be auto-phased (default: 38)
-  --no-extended         do not perform extended read-based phasing (default
-                        True) (default: False)
+                        reference fasta file (required for crams) (default: None)
+  -g {37,38,na}, --build {37,38,na}
+                        human genome build, used to determine sex chromosome pseudoautosomal regions. If `na` option is chosen, sex chromosomes will not be auto-phased
+                        (default: None)
+  --no-extended         do not perform extended read-based phasing (default True) (default: False)
   --multiread-proc-min MULTIREAD_PROC_MIN
-                        min number of variants perform multiple parallel reads
-                        of the sites file (default: 1000)
+                        min number of variants required to perform multiple parallel reads of the sites file (default: 1000)
   -q, --quiet           no logging of variant processing data (default: False)
   --min-gt-qual MIN_GT_QUAL
-                        min genotype and base quality for informative sites
-                        (default: 20)
+                        min genotype and base quality for informative sites (default: 20)
   --min-depth MIN_DEPTH
                         min coverage for informative sites (default: 10)
   --ab-homref AB_HOMREF
-                        allele balance range for homozygous reference
-                        informative sites (default: 0.0:0.2)
+                        allele balance range for homozygous reference informative sites (default: 0.0:0.2)
   --ab-homalt AB_HOMALT
-                        allele balance range for homozygous alternate
-                        informative sites (default: 0.8:1.0)
-  --ab-het AB_HET       allele balance range for heterozygous informative
-                        sites (default: 0.2:0.8)
+                        allele balance range for homozygous alternate informative sites (default: 0.8:1.0)
+  --ab-het AB_HET       allele balance range for heterozygous informative sites (default: 0.2:0.8)
   --evidence-min-ratio EVIDENCE_MIN_RATIO
-                        minimum ratio of evidence for a parent to provide an
-                        unambiguous call. Default 10:1 (default: 10)
+                        minimum ratio of evidence for a parent to provide an unambiguous call. Default 10:1 (default: 10)
   --search-dist SEARCH_DIST
-                        maximum search distance from variant for informative
-                        sites (in bases) (default: 5000)
+                        maximum search distance from variant for informative sites (in bases) (default: 5000)
   --insert-size-max-sample INSERT_SIZE_MAX_SAMPLE
-                        maximum number of read inserts to sample in order to
-                        estimate concordant read insert size (default:
-                        1000000)
+                        maximum number of read inserts to sample in order to estimate concordant read insert size (default: 1000000)
   --min-map-qual MIN_MAP_QUAL
                         minimum map quality for reads (default: 1)
-  --stdevs STDEVS       number of standard deviations from the mean insert
-                        length to define a discordant read (default: 3)
+  --stdevs STDEVS       number of standard deviations from the mean insert length to define a discordant read (default: 3)
   --readlen READLEN     expected length of input reads (default: 151)
   --split-error-margin SPLIT_ERROR_MARGIN
-                        margin of error for the location of split read
-                        clipping in bases (default: 5)
+                        margin of error for the location of split read clipping in bases (default: 5)
   --max-reads MAX_READS
-                        maximum number of reads to collect for phasing a
-                        single variant (default: 100))
+                        maximum number of reads to collect for phasing a single variant (default: 100)
 ```
 
 Many of the above optional arguments consist of options for user-defined deviation from tested defaults. For example, the `--stdevs` options allow a user to alter the definition of a discordant read. By default, it is defined as a paired-end read in which the insert size is greater than 3 standard deviations above the mean, and where mean is calculated from the first million reads in an alignment file, excluding the top 0.5%. A user can decide to alter the number of standard deviations for greater or lesser sensitivity to discordant pairs, but the set defaults are used for all testing and are generally recommended.
@@ -136,6 +103,7 @@ unfazed\
   -d mydenovos.vcf.gz\
   -s sites.vcf.gz\
   -p myped.ped\
+  -g 38 \
   --bam-pairs a_sample:a_sample.bam
 ```
 This will print an annotated vcf file of phased variants.
@@ -147,6 +115,7 @@ unfazed\
   -d mydenovos.bed\
   -s sites.vcf.gz\
   -p myped.ped\
+  -g 38 \
   --bam-pairs a_sample:a_sample.bam
 ```
 
