@@ -52,6 +52,7 @@ if [[ ! -d $WORKSPACE/anaconda ]]; then
 
     # step 3: install Unfazed requirements
     conda install -y --file requirements.txt
+    conda install -y wget
 
 fi
 
