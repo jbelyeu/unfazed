@@ -20,7 +20,7 @@ Unfazed also applies an additional phasing technique to copy-number variants (CN
 * In a duplication, the allele balance of the _de novo_ CNV's origin parent should be about double in proportion to the allele from the other parent. If parents share no alleles, this is fairly simple: if the allele balance of the alelle from parent A increases relatively, that is the origin parent. If the parents share one allele (one parent being HET, the other HOMREF or HOMALT) the DUP can only be phased if the non-shared allele is duplicated, as an increase in allele balance of the shared allele could come from a duplication in either parent. Unfazed requires an allele-balance of 0.66 in favor of the duplicated allele for each informative site.
 
 ### Sex-chromosome autophasing
-Variants which lie on the X chromosome in male samples can generally be automatically phased to the mother and those from the Y can be phased to the father. The pseudoautosomal region (PAR) is the exception, where the X and Y are indistinguishable. Unfazed will therefore perform read-based or allele-balance phasing for PAR variants but will automatically phase other sex chromosome variants in males. This requires genome build information, which must be specified via the `--build` parameter. Note that only human genome builds 19/37 and 38 are supported for special sex-chromosome phasing.
+Variants which lie on the X chromosome in male samples can generally be automatically phased to the mother and those from the Y can be phased to the father. The pseudoautosomal region (PAR) is the exception, where the X and Y are indistinguishable. Unfazed will therefore perform read-based or allele-balance phasing for PAR variants but will automatically phase other sex chromosome variants in males. This requires genome build information which is specified via the `--build` parameter. Build defaults to build 38 and works for HG38 and GRCh38. Note that only human genome builds 19/37 and 38 are supported for special sex-chromosome phasing.
 
 ## How to use it 
 Unfazed is available for install from conda. Requires at least Python 3.5.
@@ -32,7 +32,7 @@ Unfazed is available for install from conda. Requires at least Python 3.5.
   
   ```
 
-UNFAZED v1.1.0
+UNFAZED v1.0.2
 usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR] [--bam-pairs [BAM_PAIRS [BAM_PAIRS ...]]] [-t THREADS] [-o {vcf,bed}] [--include-ambiguous] [--verbose]
                [--outfile OUTFILE] [-r REFERENCE] -g {37,38,na} [--no-extended] [--multiread-proc-min MULTIREAD_PROC_MIN] [-q] [--min-gt-qual MIN_GT_QUAL]
                [--min-depth MIN_DEPTH] [--ab-homref AB_HOMREF] [--ab-homalt AB_HOMALT] [--ab-het AB_HET] [--evidence-min-ratio EVIDENCE_MIN_RATIO]
@@ -41,7 +41,7 @@ usage: unfazed [-h] [-v] -d DNMS -s SITES -p PED [-b BAM_DIR] [--bam-pairs [BAM_
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --version         Installed version (1.1.0)
+  -v, --version         Installed version (1.0.2)
   -d DNMS, --dnms DNMS  valid VCF OR BED file of the DNMs of interest> If BED, must contain chrom, start, end, kid_id, var_type columns (default: None)
   -s SITES, --sites SITES
                         sorted/bgzipped/indexed VCF/BCF file of SNVs to identify informative sites. Must contain each kid and both parents (default: None)
@@ -62,8 +62,8 @@ optional arguments:
   -r REFERENCE, --reference REFERENCE
                         reference fasta file (required for crams) (default: None)
   -g {37,38,na}, --build {37,38,na}
-                        human genome build, used to determine sex chromosome pseudoautosomal regions. If `na` option is chosen, sex chromosomes will not be auto-phased
-                        (default: None)
+                        human genome build, used to determine sex chromosome pseudoautosomal regions. If `na` option is chosen, sex chromosomes will not be auto-phased.
+                        HG19/GRCh37 interchangeable (default: None)
   --no-extended         do not perform extended read-based phasing (default True) (default: False)
   --multiread-proc-min MULTIREAD_PROC_MIN
                         min number of variants required to perform multiple parallel reads of the sites file (default: 1000)
