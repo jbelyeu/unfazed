@@ -12,16 +12,7 @@ from cyvcf2 import VCF, Writer
 from .__init__ import __version__
 from .snv_phaser import phase_snvs
 from .sv_phaser import phase_svs
-
-HOM_ALT = 2
-HET = 1
-HOM_REF = 0
-VCF_TYPES = ["vcf", "vcf.gz", "bcf"]
-SV_TYPES = ["DEL", "DUP", "INV", "CNV", "DUP:TANDEM", "DEL:ME", "CPX", "CTX"]
-SNV_TYPES = ["POINT","SNV","INDEL"]
-
-labels = ["chrom", "start", "end", "kid", "vartype"]
-QUIET_MODE = False
+from .utils import *
 
 
 def read_vars_bed(bedname):
@@ -33,7 +24,7 @@ def read_vars_bed(bedname):
             if not len(fields) == 5:
                 sys.exit(
                     "dnms bed file must contain the following columns exactly: "
-                    + ", ".join(labels)
+                    + ", ".join(LABELS)
                 )
             vartype = fields[4]
             if vartype not in SV_TYPES:
@@ -58,7 +49,7 @@ def read_vars_bedzip(bedzipname):
             if not len(fields) == 5:
                 sys.exit(
                     "dnms bed file must contain the following columns exactly: "
-                    + ", ".join(labels)
+                    + ", ".join(LABELS)
                 )
 
             vartype = fields[4]

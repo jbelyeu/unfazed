@@ -5,41 +5,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, wait
 
 from cyvcf2 import VCF
-
-HOM_ALT = 3
-GT_UNKNOWN = 2 #this isn't used, just stated for clarity
-HET = 1
-HOM_REF = 0
-SEX_KEY = {"male": 1, "female": 2}
-QUIET_MODE = False
-grch37_par1 = {
-    "x": [10001, 2781479],
-    "y": [10001, 2781479],
-}
-grch37_par2 = {
-    "x": [155701383, 156030895],
-    "y": [56887903, 57217415],
-}
-
-grch38_par1 = {
-    "x": [60001, 2699520],
-    "y": [10001, 2649520],
-}
-
-grch38_par2 = {
-    "x": [154931044, 155260560],
-    "y": [59034050, 59363566],
-}
-
-
-def get_prefix(vcf):
-    chrom_prefix = ""
-    for var in vcf:
-        if "chr" in var.CHROM.lower():
-            chrom_prefix = var.CHROM[:3]
-        return chrom_prefix
-    return ""
-
+from .utils import *
 
 def get_position(vcf, denovo, extra, whole_region):
     locs = []
